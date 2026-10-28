@@ -1,0 +1,561 @@
+'use strict';
+(function () {
+  const { GROUPS, categoryOf, fmtSize, fmtSpeed, fmtEta, fmtDate, hostOf, percent, statusText, FILTERS } = window.SG;
+  const bridge = window.vexlo;
+  const $ = (id) => document.getElementById(id);
+
+  const items = new Map();   // id -> task snapshot
+  const rowEls = new Map();  // id -> <tr>
+  const selected = new Set();
+  let order = [];            // ids as displayed
+  let anchor = null;
+  let view = { filter: 'all', cat: null, q: '', sort: 'createdAt', dir: -1 };
+  let settings = {};
+  let info = {};
+  let dirty = false;
+
+  const COLS = [
+    { key: 'filename', label: 'Tên tệp' },
+    { key: 'size', label: 'Dung lượng', num: true },
+    { key: 'progress', label: 'Tiến độ' },
+    { key: 'eta', label: 'Còn lại', num: true },
+    { key: 'speed', label: 'Tốc độ', num: true },
+    { key: 'createdAt', label: 'Thêm lúc' },
+  ];
+
+  const NAV = [
+    { id: 'all', label: 'Tất cả', icon: 'i-inbox', filter: 'all' },
+    { id: 'active', label: 'Đang tải', icon: 'i-activity', filter: 'active' },
+    { id: 'unfinished', label: 'Chưa xong', icon: 'i-clock', filter: 'unfinished' },
+    { id: 'done', label: 'Đã xong', icon: 'i-checkc', filter: 'done' },
+  ];
+
+  function icon(id) { return `<svg class="ic"><use href="#${id}"/></svg>`; }
+
+  // ---------------------------------------------------------------- sidebar + header
+
+  function buildSide() {
+    const side = $('side');
+    side.textContent = '';
+    const h1 = document.createElement('h4'); h1.textContent = 'Trạng thái'; side.appendChild(h1);
+    for (const n of NAV) { side.appendChild(navBtn(n.id, n.label, n.icon, () => { view.filter = n.filter; view.cat = null; })); }
+    const h2 = document.createElement('h4'); h2.textContent = 'Loại tệp'; side.appendChild(h2);
+    for (const [id, g] of Object.entries(GROUPS)) { side.appendChild(navBtn('cat-' + id, g.label, g.icon, () => { view.filter = 'all'; view.cat = id; })); }
+  }
+
+  function navBtn(id, label, ic, onPick) {
+    const b = document.createElement('button');
+    b.className = 'nav';
+    b.dataset.nav = id;
+    b.innerHTML = `${icon(ic)}<span></span><span class="n"></span>`;
+    b.children[1].textContent = label;
+    b.addEventListener('click', () => { onPick(); selected.clear(); refresh(); });
+    return b;
+  }
+
+  function updateSide() {
+    const all = [...items.values()];
+    const cur = view.cat ? 'cat-' + view.cat : view.filter;
+    for (const b of $('side').children) {
+      if (!b.dataset.nav) { continue; }
+      b.classList.toggle('on', b.dataset.nav === cur);
+      let n;
+      if (b.dataset.nav.startsWith('cat-')) { n = all.filter((t) => categoryOf(t.filename || t.url, t.kind) === b.dataset.nav.slice(4)).length; }
+      else { n = all.filter(FILTERS[b.dataset.nav]).length; }
+      b.querySelector('.n').textContent = n || '';
+    }
+  }
+
+  function buildHead() {
+    const tr = $('head');
+    tr.textContent = '';
+    for (const c of COLS) {
+      const th = document.createElement('th');
+      th.className = c.num ? 'num' : '';
+      th.dataset.key = c.key;
+      th.innerHTML = '<span></span><span class="arr"></span>';
+      th.firstChild.textContent = c.label;
+      th.addEventListener('click', () => {
+        if (view.sort === c.key) { view.dir = -view.dir; } else { view.sort = c.key; view.dir = c.key === 'filename' ? 1 : -1; }
+        refresh();
+      });
+      tr.appendChild(th);
+    }
+  }
+
+  function updateHead() {
+    for (const th of $('head').children) {
+      th.querySelector('.arr').textContent = th.dataset.key === view.sort ? (view.dir > 0 ? '▲' : '▼') : '';
+    }
+  }
+
+  // ---------------------------------------------------------------- rows
+
+  function sortValue(t, key) {
+    switch (key) {
+      case 'filename': return (t.filename || t.url || '').toLowerCase();
+      case 'progress': return percent(t);
+      case 'eta': return t.eta || 0;
+      default: return t[key] || 0;
+    }
+  }
+
+  function visibleIds() {
+    const q = view.q.trim().toLowerCase();
+    const list = [...items.values()].filter((t) => {
+      if (view.cat && categoryOf(t.filename || t.url, t.kind) !== view.cat) { return false; }
+      if (!FILTERS[view.filter](t)) { return false; }
+      return !q || (t.filename || '').toLowerCase().includes(q) || (t.url || '').toLowerCase().includes(q);
+    });
+    list.sort((a, b) => {
+      const x = sortValue(a, view.sort); const y = sortValue(b, view.sort);
+      const c = x < y ? -1 : x > y ? 1 : 0;
+      return (c || (b.createdAt - a.createdAt)) * (c ? view.dir : 1);
+    });
+    return list.map((t) => t.id);
+  }
+
+  function makeRow(id) {
+    const tr = document.createElement('tr');
+    tr.dataset.id = id;
+    tr.innerHTML = `
+      <td><div class="file"><div class="ficon"></div><div class="fname"><b></b><small></small></div></div></td>
+      <td class="num sz"></td>
+      <td><div class="prog"><i></i><em></em></div><span class="stat"></span></td>
+      <td class="num eta"></td><td class="num spd"></td><td class="dt"></td>`;
+    tr.addEventListener('mousedown', (e) => onRowDown(e, id));
+    tr.addEventListener('dblclick', () => openFile(id));
+    tr.addEventListener('contextmenu', (e) => { e.preventDefault(); if (!selected.has(id)) { selected.clear(); selected.add(id); syncSel(); } showMenu(e.clientX, e.clientY); });
+    return tr;
+  }
+
+  function fillRow(tr, t) {
+    const cat = categoryOf(t.filename || t.url, t.kind);
+    tr.className = `s-${t.status}` + (selected.has(t.id) ? ' sel' : '');
+    const ficon = tr.querySelector('.ficon');
+    if (ficon.dataset.cat !== cat) { ficon.dataset.cat = cat; ficon.className = 'ficon ' + cat; ficon.innerHTML = icon(GROUPS[cat].icon); }
+    const name = tr.querySelector('.fname b');
+    const nm = t.filename || decodeName(t.url);
+    if (name.textContent !== nm) { name.textContent = nm; name.title = t.url; }
+    const site = hostOf((t.meta && t.meta.page) || t.url);
+    tr.querySelector('.fname small').textContent = site + (t.kind !== 'file' ? '  ·  ' + (t.kind === 'hls' ? 'HLS' : 'DASH') : '');
+    const p = percent(t);
+    tr.querySelector('.prog i').style.width = p.toFixed(1) + '%';
+    tr.querySelector('.prog em').textContent = t.size || t.segTotal || t.status === 'done' ? Math.floor(p) + '%' : '';
+    tr.querySelector('.stat').textContent = statusText(t);
+    tr.querySelector('.sz').textContent = fmtSize(t.size) + (t.kind !== 'file' && t.size && t.status !== 'done' ? ' (ước tính)' : '');
+    tr.querySelector('.eta').textContent = t.status === 'downloading' ? fmtEta(t.eta) : '';
+    tr.querySelector('.spd').textContent = t.status === 'downloading' ? fmtSpeed(t.speed) : '';
+    tr.querySelector('.dt').textContent = fmtDate(t.createdAt);
+  }
+
+  function decodeName(url) {
+    try { return decodeURIComponent(new URL(url).pathname.split('/').filter(Boolean).pop() || url); } catch { return url; }
+  }
+
+  function render() {
+    dirty = false;
+    order = visibleIds();
+    const tbody = $('rows');
+    const want = new Set(order);
+    for (const [id, el] of rowEls) { if (!want.has(id)) { el.remove(); rowEls.delete(id); } }
+    let prev = null;
+    for (const id of order) {
+      let tr = rowEls.get(id);
+      if (!tr) { tr = makeRow(id); rowEls.set(id, tr); }
+      fillRow(tr, items.get(id));
+      const should = prev ? prev.nextSibling : tbody.firstChild;
+      if (tr !== should) { tbody.insertBefore(tr, should); }
+      prev = tr;
+    }
+    updateHead();
+    updateSide();
+    updateToolbar();
+    updateStatus();
+    const empty = $('empty');
+    empty.classList.toggle('show', order.length === 0);
+    if (!order.length) {
+      const filtered = items.size > 0;
+      $('emptyT').textContent = filtered ? 'Không có tệp phù hợp' : 'Chưa có tệp nào';
+      $('emptyP').innerHTML = filtered ? 'Thử đổi bộ lọc hoặc từ khóa tìm kiếm.'
+        : 'Dán link bằng <kbd>Ctrl</kbd> + <kbd>V</kbd>, kéo thả link vào đây, hoặc dùng tiện ích Vexlo trên Firefox để tự bắt video và tệp tải.';
+    }
+  }
+
+  function schedule() {
+    if (dirty) { return; }
+    dirty = true;
+    requestAnimationFrame(render);
+  }
+  const refresh = render;
+
+  // ---------------------------------------------------------------- selection
+
+  function syncSel() {
+    for (const [id, tr] of rowEls) { tr.classList.toggle('sel', selected.has(id)); }
+    updateToolbar();
+  }
+
+  function onRowDown(e, id) {
+    if (e.button === 2 && selected.has(id)) { return; }
+    if (e.shiftKey && anchor && order.includes(anchor)) {
+      const a = order.indexOf(anchor); const b = order.indexOf(id);
+      if (!e.ctrlKey) { selected.clear(); }
+      for (let i = Math.min(a, b); i <= Math.max(a, b); i++) { selected.add(order[i]); }
+    } else if (e.ctrlKey || e.metaKey) {
+      if (selected.has(id)) { selected.delete(id); } else { selected.add(id); }
+      anchor = id;
+    } else { selected.clear(); selected.add(id); anchor = id; }
+    syncSel();
+  }
+
+  const selTasks = () => [...selected].map((id) => items.get(id)).filter(Boolean);
+
+  function updateToolbar() {
+    const sel = selTasks();
+    $('bResume').disabled = !sel.some((t) => t.status === 'paused' || t.status === 'error');
+    $('bPause').disabled = !sel.some((t) => t.status === 'downloading' || t.status === 'queued');
+    $('bDel').disabled = sel.length === 0;
+    $('bPauseAll').disabled = ![...items.values()].some((t) => t.status === 'downloading' || t.status === 'queued');
+    $('bErr').disabled = ![...items.values()].some((t) => t.status === 'error');
+    $('bErr').lastElementChild.textContent = 'Xóa lỗi' + (errCount() ? ' (' + errCount() + ')' : '');
+    $('bClear').disabled = ![...items.values()].some((t) => t.status === 'done');
+  }
+
+  function updateStatus() {
+    let speed = 0; let active = 0;
+    for (const t of items.values()) { if (t.status === 'downloading') { speed += t.speed || 0; active++; } }
+    $('stSpeed').textContent = fmtSpeed(speed) || '0 B/s';
+    let waiting = 0;
+    for (const t of items.values()) { if (t.status === 'queued') { waiting++; } }
+    const maxRun = settings.maxConcurrent || 0;
+    $('stActive').textContent = `${active}${maxRun ? '/' + maxRun : ''} đang tải` + (waiting ? ` · ${waiting} đang chờ` : '');
+    $('stActive').title = 'Số tệp đang tải / số tệp tối đa tải cùng lúc' + (waiting ? `. ${waiting} tệp đang xếp hàng, sẽ tự tải khi có chỗ trống.` : '');
+    $('stTotal').textContent = `${items.size} tệp`;
+    const lim = settings.speedLimitKB;
+    $('stLimit').textContent = lim ? `Giới hạn: ${fmtSize(lim * 1024)}/s` : '';
+    $('stDot').classList.toggle('ok', !!info.apiOk);
+    $('stApi').textContent = info.apiOk ? 'Trình duyệt: sẵn sàng' : 'Trình duyệt: chưa kết nối';
+    $('stApi').title = info.apiOk ? `Đang lắng nghe cổng ${info.port}` : (info.apiError || '');
+  }
+
+  // ---------------------------------------------------------------- actions
+
+  function toast(msg, isErr) {
+    const t = $('toast');
+    t.textContent = msg;
+    t.className = 'toast show' + (isErr ? ' err' : '');
+    clearTimeout(toast.t);
+    toast.t = setTimeout(() => { t.className = 'toast'; }, 2800);
+  }
+
+  async function openFile(id) {
+    const t = items.get(id);
+    if (!t) { return; }
+    if (t.status !== 'done') { return t.status === 'paused' || t.status === 'error' ? bridge.resume([id]) : undefined; }
+    const err = await bridge.open(id);
+    if (err) { toast(err, true); }
+  }
+
+  /**
+   * Small modal used for every "are you sure": resolves {ok, deleteFile, remember}. Esc / click outside / X = cancel.
+   * opts: title, message, okLabel, danger, fileOption ({checked}), remember
+   */
+  function askDialog(opts) {
+    return new Promise((resolve) => {
+      const ov = $('mDlg');
+      $('dlgTitle').textContent = opts.title;
+      $('dlgMsg').textContent = opts.message;
+      $('dlgFileRow').classList.toggle('hidden', !opts.fileOption);
+      $('dlgFile').checked = !!(opts.fileOption && opts.fileOption.checked);
+      $('dlgRemRow').classList.toggle('hidden', !opts.remember);
+      $('dlgRem').checked = false;
+      $('dlgOk').textContent = opts.okLabel || 'Đồng ý';
+      $('dlgOk').classList.toggle('danger', !!opts.danger);
+      $('dlgOk').classList.toggle('pri', !opts.danger);
+      let settled = false;
+      const finish = (ok) => {
+        if (settled) { return; }
+        settled = true;
+        obs.disconnect();
+        $('dlgOk').removeEventListener('click', onOk);
+        $('dlgCancel').removeEventListener('click', onCancel);
+        const out = { ok, deleteFile: ok && !!opts.fileOption && $('dlgFile').checked, remember: ok && !!opts.remember && $('dlgRem').checked };
+        ov.classList.remove('show');
+        resolve(out);
+      };
+      const onOk = () => finish(true);
+      const onCancel = () => finish(false);
+      // closeModals() (Esc, backdrop, X) just removes .show: treat that as cancel.
+      const obs = new MutationObserver(() => { if (!ov.classList.contains('show')) { finish(false); } });
+      $('dlgOk').addEventListener('click', onOk);
+      $('dlgCancel').addEventListener('click', onCancel);
+      openModal('mDlg');
+      obs.observe(ov, { attributes: true, attributeFilter: ['class'] });
+      $('dlgCancel').focus();
+    });
+  }
+
+  /**
+   * Remove the selected rows.
+   *  preset 'list'  : menu "Xóa khỏi danh sách"  - never touches saved files
+   *  preset 'files' : menu "Xóa kèm tệp" / Shift+Delete - also deletes the saved files (always confirmed)
+   *  no preset      : toolbar button / Delete key - follows Settings > "Khi xóa một mục đã tải xong" (default: ask)
+   */
+  const errCount = () => [...items.values()].filter((t) => t.status === 'error').length;
+
+  async function removeSelected(preset) {
+    const sel = selTasks();
+    if (!sel.length) { return; }
+    const done = sel.filter((t) => t.status === 'done');
+    const unfinished = sel.length - done.length;
+    const unfinishedNote = unfinished ? ` ${unfinished} mục chưa tải xong sẽ bị xóa dữ liệu tải dở.` : '';
+    let deleteFile = false;
+
+    if (preset === 'files') {
+      const r = await askDialog({
+        title: 'Xóa kèm tệp', danger: true, okLabel: 'Xóa cả tệp',
+        message: `Xóa ${sel.length} mục khỏi danh sách và xóa luôn ${done.length} tệp đã tải trên ổ đĩa? Không thể khôi phục.${unfinishedNote}`,
+      });
+      if (!r.ok) { return; }
+      deleteFile = true;
+    } else {
+      const mode = preset === 'list' ? 'list' : (done.length ? (settings.deleteMode || 'ask') : 'list');
+      if (mode === 'ask') {
+        const r = await askDialog({
+          title: sel.length > 1 ? `Xóa ${sel.length} mục` : 'Xóa mục này',
+          message: `Xóa ${sel.length} mục khỏi danh sách tải?${unfinishedNote}`,
+          okLabel: 'Xóa', danger: false, fileOption: { checked: false }, remember: true,
+        });
+        if (!r.ok) { return; }
+        deleteFile = r.deleteFile;
+        if (r.remember) { settings = await bridge.setSettings({ deleteMode: deleteFile ? 'files' : 'list' }); toast('Đã lưu lựa chọn. Đổi lại trong Tùy chọn › Chung.'); }
+      } else {
+        deleteFile = mode === 'files';
+        if (unfinished || sel.length > 1) {
+          const r = await askDialog({
+            title: 'Xóa khỏi danh sách', okLabel: 'Xóa',
+            message: `Xóa ${sel.length} mục khỏi danh sách${deleteFile ? ' và xóa luôn tệp đã tải' : (done.length ? ' (giữ lại tệp đã tải)' : '')}?${unfinishedNote}`,
+            danger: deleteFile,
+          });
+          if (!r.ok) { return; }
+        }
+      }
+    }
+    const ids = sel.map((t) => t.id);
+    selected.clear();
+    await bridge.remove(ids, deleteFile);
+  }
+
+  // ---------------------------------------------------------------- context menu
+
+  function showMenu(x, y) {
+    const sel = selTasks();
+    if (!sel.length) { return; }
+    const one = sel.length === 1 ? sel[0] : null;
+    const canRes = sel.some((t) => t.status === 'paused' || t.status === 'error');
+    const canPause = sel.some((t) => t.status === 'downloading' || t.status === 'queued');
+    const entries = [
+      one && one.status === 'done' && ['Mở tệp', 'i-open', () => openFile(one.id)],
+      one && ['Mở thư mục chứa tệp', 'i-folder', () => bridge.showInFolder(one.id)],
+      canRes && ['Tiếp tục', 'i-play', () => bridge.resume(sel.map((t) => t.id))],
+      canPause && ['Tạm dừng', 'i-pause', () => bridge.pause(sel.map((t) => t.id))],
+      one && ['Sao chép link', 'i-copy', async () => { await bridge.copyLink(one.id); toast('Đã sao chép link'); }],
+      one && one.meta && one.meta.page && ['Mở trang web gốc', 'i-open', async () => {
+        if (!(await bridge.openPage(one.id))) { toast('Không có địa chỉ trang gốc', true); }
+      }],
+      'sep',
+      ['Xóa khỏi danh sách (giữ tệp)', 'i-trash', () => removeSelected('list')],
+      sel.some((t) => t.status === 'done') && ['Xóa kèm tệp trên ổ đĩa…', 'i-trash', () => removeSelected('files'), true],
+    ].filter(Boolean);
+    const ctx = $('ctx');
+    ctx.textContent = '';
+    for (const e of entries) {
+      if (e === 'sep') { ctx.appendChild(document.createElement('hr')); continue; }
+      const b = document.createElement('button');
+      b.innerHTML = icon(e[1]) + '<span></span>';
+      b.lastChild.textContent = e[0];
+      if (e[3]) { b.classList.add('dng'); }
+      b.addEventListener('click', () => { hideMenu(); e[2](); });
+      ctx.appendChild(b);
+    }
+    ctx.classList.add('show');
+    const r = ctx.getBoundingClientRect();
+    ctx.style.left = Math.max(4, Math.min(x, window.innerWidth - r.width - 6)) + 'px';
+    ctx.style.top = Math.max(4, Math.min(y, window.innerHeight - r.height - 6)) + 'px';
+  }
+  function hideMenu() { $('ctx').classList.remove('show'); }
+  document.addEventListener('mousedown', (e) => { if (!$('ctx').contains(e.target)) { hideMenu(); } });
+  window.addEventListener('blur', hideMenu);
+
+  // ---------------------------------------------------------------- add dialog
+
+  function openModal(id) { $(id).classList.add('show'); }
+  function closeModals() { document.querySelectorAll('.overlay.show').forEach((o) => o.classList.remove('show')); }
+  document.querySelectorAll('[data-close]').forEach((b) => b.addEventListener('click', closeModals));
+  document.querySelectorAll('.overlay').forEach((o) => o.addEventListener('mousedown', (e) => { if (e.target === o) { closeModals(); } }));
+
+  function extractUrls(text) {
+    const found = String(text || '').match(/https?:\/\/[^\s"'<>]+/gi) || [];
+    return [...new Set(found.map((u) => u.replace(/[),.;]+$/, '')))];
+  }
+
+  function openAdd(prefill) {
+    $('aUrls').value = (prefill || '').trim();
+    $('aName').value = '';
+    $('aDir').value = '';
+    $('aConn').value = settings.connections || 8;
+    $('aQual').value = 'best';
+    openModal('mAdd');
+    onUrlsChanged();
+    setTimeout(() => $('aUrls').focus(), 30);
+  }
+
+  function onUrlsChanged() {
+    const n = extractUrls($('aUrls').value).length;
+    $('aNameRow').style.opacity = n > 1 ? '.4' : '1';
+    $('aName').disabled = n > 1;
+    $('aStart').disabled = n === 0;
+    $('aLater').disabled = n === 0;
+  }
+  $('aUrls').addEventListener('input', onUrlsChanged);
+
+  async function submitAdd(start) {
+    const urls = extractUrls($('aUrls').value);
+    if (!urls.length) { return; }
+    const res = await bridge.add({
+      urls, filename: $('aName').value.trim() || undefined, dir: $('aDir').value.trim() || undefined,
+      connections: Number($('aConn').value) || undefined, quality: $('aQual').value, start,
+    });
+    closeModals();
+    if (res.errors && res.errors.length) { toast(`${res.errors.length} link không hợp lệ`, true); }
+    else { toast(start ? `Đã thêm ${res.ids.length} tệp` : `Đã thêm ${res.ids.length} tệp (chưa tải)`); }
+    view.filter = 'all'; view.cat = null; refresh();
+  }
+  $('aStart').addEventListener('click', () => submitAdd(true));
+  $('aLater').addEventListener('click', () => submitAdd(false));
+  $('aBrowse').addEventListener('click', async () => { const d = await bridge.chooseFolder($('aDir').value); if (d) { $('aDir').value = d; } });
+
+  // ---------------------------------------------------------------- settings dialog
+
+  function openSettings() {
+    $('sDir').value = settings.downloadDir || '';
+    $('sCat').checked = !!settings.categorize;
+    $('sConfirm').checked = !!settings.confirm;
+    $('sProg').checked = settings.progressWindow !== false;
+    $('sOnErr').value = settings.progressOnError || 'ask';
+    $('sUpd').checked = settings.autoUpdate !== false;
+    $('sSchOn').checked = !!settings.scheduleEnabled;
+    $('sSchStart').value = settings.scheduleStart || '01:00';
+    $('sSchStop').value = settings.scheduleStop || '';
+    for (let d = 0; d < 7; d++) { $('sDay' + d).checked = (settings.scheduleDays || [0, 1, 2, 3, 4, 5, 6]).includes(d); }
+    $('sNotify').checked = !!settings.notify;
+    $('sDelete').value = settings.deleteMode || 'ask';
+    $('sTray').checked = !!settings.closeToTray;
+    $('sStart').checked = !!settings.startWithOS;
+    $('sConn').value = settings.connections;
+    $('sMax').value = settings.maxConcurrent;
+    $('sLimit').value = settings.speedLimitKB;
+    $('sPort').value = settings.port;
+    $('sToken').textContent = settings.token || '';
+    renderApiStatus();
+    openModal('mSet');
+  }
+
+  function renderApiStatus() {
+    const ok = info.apiOk;
+    $('bStatus').innerHTML = `<span class="pill ${ok ? '' : 'warn'}">${ok ? 'Đang lắng nghe cổng ' + info.port : 'Chưa sẵn sàng'}</span>`;
+    if (!ok && info.apiError) { const s = document.createElement('div'); s.className = 'hint'; s.textContent = info.apiError; $('bStatus').appendChild(s); }
+  }
+
+  document.querySelectorAll('.tabs button').forEach((b) => b.addEventListener('click', () => {
+    document.querySelectorAll('.tabs button').forEach((x) => x.classList.toggle('on', x === b));
+    document.querySelectorAll('.pane').forEach((p) => p.classList.toggle('on', p.id === 'p-' + b.dataset.tab));
+  }));
+  $('sBrowse').addEventListener('click', async () => { const d = await bridge.chooseFolder($('sDir').value); if (d) { $('sDir').value = d; } });
+  $('bExt').addEventListener('click', () => bridge.openExtensionFolder());
+  $('bCopyTok').addEventListener('click', async () => {
+    try { await navigator.clipboard.writeText(settings.token || ''); toast('Đã chép mã ghép nối'); } catch { toast('Không chép được', true); }
+  });
+  $('sSave').addEventListener('click', async () => {
+    settings = await bridge.setSettings({
+      downloadDir: $('sDir').value.trim(), categorize: $('sCat').checked, confirm: $('sConfirm').checked, notify: $('sNotify').checked, progressWindow: $('sProg').checked, progressOnError: $('sOnErr').value, autoUpdate: $('sUpd').checked,
+      scheduleEnabled: $('sSchOn').checked, scheduleStart: $('sSchStart').value, scheduleStop: $('sSchStop').value,
+      scheduleDays: [0, 1, 2, 3, 4, 5, 6].filter((d) => $('sDay' + d).checked), deleteMode: $('sDelete').value,
+      closeToTray: $('sTray').checked, startWithOS: $('sStart').checked, connections: Number($('sConn').value),
+      maxConcurrent: Number($('sMax').value), speedLimitKB: Number($('sLimit').value), port: Number($('sPort').value),
+    });
+    closeModals();
+    toast('Đã lưu tùy chọn');
+    updateStatus();
+  });
+  $('stApi').addEventListener('click', openSettings);
+
+  // ---------------------------------------------------------------- wiring
+
+  $('bAdd').addEventListener('click', () => openAdd(''));
+  $('bResume').addEventListener('click', () => bridge.resume(selTasks().filter((t) => t.status === 'paused' || t.status === 'error').map((t) => t.id)));
+  $('bPause').addEventListener('click', () => bridge.pause(selTasks().filter((t) => t.status === 'downloading' || t.status === 'queued').map((t) => t.id)));
+  $('bPauseAll').addEventListener('click', () => bridge.pauseAll());
+  $('bDel').addEventListener('click', () => removeSelected());
+  $('bErr').addEventListener('click', async () => {
+    const ids = [...items.values()].filter((t) => t.status === 'error').map((t) => t.id);
+    if (!ids.length) { return; }
+    await bridge.remove(ids, false);
+    toast(`Đã xóa ${ids.length} tải bị lỗi`);
+  });
+  $('bClear').addEventListener('click', async () => { await bridge.clearDone(); toast('Đã xóa các tệp đã xong khỏi danh sách'); });
+  $('bSettings').addEventListener('click', openSettings);
+  // "When everything is finished": chosen once here, asked once (a single countdown) when the last file completes.
+  bridge.afterGet().then((v) => { $('afterSel').value = v || 'none'; }).catch(() => {});
+  bridge.on('after:changed', (v) => { $('afterSel').value = v || 'none'; });
+  $('afterSel').addEventListener('change', () => {
+    bridge.afterSet($('afterSel').value);
+    if ($('afterSel').value !== 'none') { toast('Sẽ thực hiện khi tệp cuối cùng tải xong (có đếm ngược 60 giây để hủy)'); }
+  });
+  $('q').addEventListener('input', (e) => { view.q = e.target.value; refresh(); });
+
+  document.addEventListener('keydown', (e) => {
+    const typing = /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement && document.activeElement.tagName);
+    if (e.key === 'Escape') { closeModals(); hideMenu(); return; }
+    if (typing || document.querySelector('.overlay.show')) { return; }
+    if (e.key === 'Delete') { removeSelected(e.shiftKey ? 'files' : undefined); }
+    else if (e.key === 'Enter' && selected.size === 1) { openFile([...selected][0]); }
+    else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'a') { e.preventDefault(); order.forEach((id) => selected.add(id)); syncSel(); }
+    else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'n') { e.preventDefault(); openAdd(''); }
+    else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'f') { e.preventDefault(); $('q').focus(); }
+  });
+
+  document.addEventListener('paste', (e) => {
+    if (/^(INPUT|TEXTAREA)$/.test(document.activeElement && document.activeElement.tagName)) { return; }
+    const urls = extractUrls(e.clipboardData && e.clipboardData.getData('text'));
+    if (urls.length) { e.preventDefault(); openAdd(urls.join('\n')); }
+  });
+
+  let dragDepth = 0;
+  window.addEventListener('dragenter', (e) => { e.preventDefault(); dragDepth++; $('drop').classList.add('show'); });
+  window.addEventListener('dragleave', () => { if (--dragDepth <= 0) { dragDepth = 0; $('drop').classList.remove('show'); } });
+  window.addEventListener('dragover', (e) => e.preventDefault());
+  window.addEventListener('drop', (e) => {
+    e.preventDefault(); dragDepth = 0; $('drop').classList.remove('show');
+    const text = (e.dataTransfer.getData('text/uri-list') || '') + '\n' + (e.dataTransfer.getData('text/plain') || '');
+    const urls = extractUrls(text);
+    if (urls.length) { openAdd(urls.join('\n')); }
+  });
+
+  bridge.on('dl:added', (t) => { items.set(t.id, t); schedule(); });
+  bridge.on('dl:update', (t) => { items.set(t.id, t); schedule(); });
+  bridge.on('dl:removed', ({ id }) => { items.delete(id); selected.delete(id); schedule(); });
+  bridge.on('settings:changed', (s) => { settings = s; schedule(); });
+  bridge.on('app:status', (i) => { info = i; schedule(); });
+
+  async function init() {
+    buildSide();
+    buildHead();
+    [settings, info] = await Promise.all([bridge.getSettings(), bridge.appInfo()]);
+    for (const t of await bridge.list()) { items.set(t.id, t); }
+    render();
+    window.__sgReady = true;
+  }
+  init();
+}());

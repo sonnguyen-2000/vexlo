@@ -1,0 +1,43 @@
+# Builds the Windows installer and publishes a GitHub Release whenever a tag like v0.2.0 is pushed.
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Run tests (informational)
+        run: npm test
+        continue-on-error: true
+
+      - name: Build the Edge/Chrome extension folder
+        run: node tools/make-edge.js
+
+      - name: Build the installer and publish the release
+        run: npx electron-builder --win nsis --publish always
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Attach the browser extensions to the release
+        shell: pwsh
+        run: |
+          Compress-Archive -Path extension -DestinationPath Vexlo-firefox-extension.zip -Force
+          Compress-Archive -Path extension-edge -DestinationPath Vexlo-edge-extension.zip -Force
+          gh release upload "${{ github.ref_name }}" Vexlo-firefox-extension.zip Vexlo-edge-extension.zip --clobber
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

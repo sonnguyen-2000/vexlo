@@ -1,0 +1,59 @@
+{
+  "manifest_version": 2,
+  "name": "Vexlo Integration",
+  "version": "0.1.0",
+  "description": "Gửi link tải và video trong Firefox sang ứng dụng Vexlo (kiểu IDM).",
+  "icons": {
+    "48": "icons/icon.svg",
+    "96": "icons/icon.svg"
+  },
+  "permissions": [
+    "webRequest",
+    "webNavigation",
+    "downloads",
+    "tabs",
+    "cookies",
+    "storage",
+    "contextMenus",
+    "notifications",
+    "nativeMessaging",
+    "<all_urls>"
+  ],
+  "background": {
+    "scripts": [
+      "lib/i18n.js",
+      "lib/classify.js",
+      "lib/hlsinfo.js",
+      "background.js"
+    ],
+    "persistent": true
+  },
+  "browser_action": {
+    "default_title": "Vexlo",
+    "default_icon": "icons/icon.svg",
+    "default_popup": "popup.html"
+  },
+  "options_ui": {
+    "page": "options.html",
+    "open_in_tab": true
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "http://*/*",
+        "https://*/*"
+      ],
+      "js": [
+        "content.js"
+      ],
+      "all_frames": true,
+      "run_at": "document_idle"
+    }
+  ],
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "vexlo@local.app",
+      "strict_min_version": "91.0"
+    }
+  }
+}

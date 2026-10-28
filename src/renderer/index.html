@@ -1,0 +1,184 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src 'self'; script-src 'self'">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Vexlo</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<svg class="sprite" aria-hidden="true">
+  <symbol id="i-plus" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></symbol>
+  <symbol id="i-play" viewBox="0 0 24 24"><polygon points="6 4 20 12 6 20 6 4"/></symbol>
+  <symbol id="i-pause" viewBox="0 0 24 24"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></symbol>
+  <symbol id="i-stop" viewBox="0 0 24 24"><rect x="5" y="5" width="14" height="14" rx="2"/></symbol>
+  <symbol id="i-alert" viewBox="0 0 24 24"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></symbol>
+  <symbol id="i-trash" viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></symbol>
+  <symbol id="i-sweep" viewBox="0 0 24 24"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></symbol>
+  <symbol id="i-sliders" viewBox="0 0 24 24"><line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/><line x1="1" y1="14" x2="7" y2="14"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="17" y1="16" x2="23" y2="16"/></symbol>
+  <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></symbol>
+  <symbol id="i-folder" viewBox="0 0 24 24"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></symbol>
+  <symbol id="i-link" viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></symbol>
+  <symbol id="i-download" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></symbol>
+  <symbol id="i-x" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></symbol>
+  <symbol id="i-film" viewBox="0 0 24 24"><rect x="2" y="2" width="20" height="20" rx="2.18"/><line x1="7" y1="2" x2="7" y2="22"/><line x1="17" y1="2" x2="17" y2="22"/><line x1="2" y1="12" x2="22" y2="12"/><line x1="2" y1="7" x2="7" y2="7"/><line x1="2" y1="17" x2="7" y2="17"/><line x1="17" y1="17" x2="22" y2="17"/><line x1="17" y1="7" x2="22" y2="7"/></symbol>
+  <symbol id="i-music" viewBox="0 0 24 24"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></symbol>
+  <symbol id="i-archive" viewBox="0 0 24 24"><polyline points="21 8 21 21 3 21 3 8"/><rect x="1" y="3" width="22" height="5"/><line x1="10" y1="12" x2="14" y2="12"/></symbol>
+  <symbol id="i-package" viewBox="0 0 24 24"><line x1="16.5" y1="9.4" x2="7.5" y2="4.21"/><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></symbol>
+  <symbol id="i-doc" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></symbol>
+  <symbol id="i-file" viewBox="0 0 24 24"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><polyline points="13 2 13 9 20 9"/></symbol>
+  <symbol id="i-inbox" viewBox="0 0 24 24"><polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11L2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></symbol>
+  <symbol id="i-activity" viewBox="0 0 24 24"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></symbol>
+  <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></symbol>
+  <symbol id="i-checkc" viewBox="0 0 24 24"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></symbol>
+  <symbol id="i-copy" viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></symbol>
+  <symbol id="i-open" viewBox="0 0 24 24"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></symbol>
+  <symbol id="i-zap" viewBox="0 0 24 24"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></symbol>
+</svg>
+
+<div class="app">
+  <div class="toolbar" id="toolbar">
+    <button class="tb primary" id="bAdd" title="Thêm link (Ctrl+N)"><svg class="ic"><use href="#i-plus"/></svg><span>Thêm link</span></button>
+    <button class="tb" id="bResume" title="Tiếp tục"><svg class="ic"><use href="#i-play"/></svg><span>Tiếp tục</span></button>
+    <button class="tb" id="bPause" title="Tạm dừng"><svg class="ic"><use href="#i-pause"/></svg><span>Tạm dừng</span></button>
+    <button class="tb" id="bPauseAll" title="Dừng tất cả"><svg class="ic"><use href="#i-stop"/></svg><span>Dừng tất cả</span></button>
+    <div class="sep"></div>
+    <button class="tb danger" id="bDel" title="Xóa (Delete)"><svg class="ic"><use href="#i-trash"/></svg><span>Xóa</span></button>
+    <button class="tb danger" id="bErr" title="Xóa các tải bị lỗi (chưa tải thành công) khỏi danh sách"><svg class="ic"><use href="#i-alert"/></svg><span>Xóa lỗi</span></button>
+    <button class="tb" id="bClear" title="Xóa các tệp đã tải xong khỏi danh sách"><svg class="ic"><use href="#i-sweep"/></svg><span>Xóa đã xong</span></button>
+    <div class="sep"></div>
+    <button class="tb" id="bSettings" title="Tùy chọn"><svg class="ic"><use href="#i-sliders"/></svg><span>Tùy chọn</span></button>
+    <div class="grow"></div>
+    <label class="search"><svg class="ic"><use href="#i-search"/></svg><input id="q" type="text" placeholder="Tìm tệp…" autocomplete="off"></label>
+  </div>
+
+  <div class="main">
+    <nav class="side" id="side"></nav>
+    <section class="content">
+      <div class="tablewrap" id="tw">
+        <table>
+          <colgroup><col><col width="96"><col width="210"><col width="120"><col width="100"><col width="118"></colgroup>
+          <thead><tr id="head"></tr></thead>
+          <tbody id="rows"></tbody>
+        </table>
+      </div>
+      <div class="empty" id="empty">
+        <div class="big"><svg class="ic"><use href="#i-download"/></svg></div>
+        <h3 id="emptyT">Chưa có tệp nào</h3>
+        <p id="emptyP">Dán link bằng <kbd>Ctrl</kbd> + <kbd>V</kbd>, kéo thả link vào đây, hoặc dùng tiện ích Vexlo trên Firefox để tự bắt video và tệp tải.</p>
+      </div>
+    </section>
+  </div>
+
+  <div class="status">
+    <span class="it"><svg class="ic"><use href="#i-zap"/></svg><b id="stSpeed">0 B/s</b></span>
+    <span class="it" id="stActive">0 đang tải</span>
+    <span class="it" id="stTotal">0 tệp</span>
+    <span class="it" id="stLimit"></span>
+    <span class="grow"></span>
+    <label class="it" title="Chỉ chọn một lần: khi tệp cuối cùng tải xong sẽ hiện đếm ngược 60 giây rồi mới thực hiện">Khi tải xong hết:
+      <select id="afterSel" aria-label="Khi tải xong hết">
+        <option value="none">Không làm gì</option><option value="shutdown">Tắt máy</option><option value="sleep">Ngủ</option><option value="hibernate">Ngủ đông</option><option value="exit">Thoát Vexlo</option>
+      </select></label>
+    <span class="it"><span class="dot" id="stDot"></span><a id="stApi">Trình duyệt</a></span>
+  </div>
+</div>
+
+<!-- Add URL -->
+<div class="overlay" id="mAdd">
+  <div class="modal" role="dialog" aria-label="Thêm link tải">
+    <header>Thêm link tải <button class="x" data-close><svg class="ic"><use href="#i-x"/></svg></button></header>
+    <div class="body">
+      <div class="field"><label for="aUrls">Link (mỗi dòng một link)</label><textarea id="aUrls" placeholder="https://… (hỗ trợ tệp thường, .m3u8, .mpd)" spellcheck="false"></textarea></div>
+      <div class="field" id="aNameRow"><label for="aName">Tên tệp (không bắt buộc)</label><input id="aName" type="text" placeholder="Tự lấy từ máy chủ"></div>
+      <div class="field"><label for="aDir">Lưu vào</label><div class="row"><input id="aDir" type="text" placeholder="Tự phân loại theo loại tệp"><button class="btn sm" id="aBrowse">Chọn…</button></div></div>
+      <div class="grid2">
+        <div class="field"><label for="aConn">Số kết nối</label><input id="aConn" type="number" min="1" max="32"></div>
+        <div class="field"><label for="aQual">Chất lượng (video luồng)</label><select id="aQual"><option value="best">Cao nhất</option><option value="1080">Tối đa 1080p</option><option value="720">Tối đa 720p</option><option value="480">Tối đa 480p</option><option value="worst">Thấp nhất</option></select></div>
+      </div>
+    </div>
+    <footer><button class="btn" data-close>Hủy</button><button class="btn" id="aLater">Tải sau</button><button class="btn pri" id="aStart"><svg class="ic"><use href="#i-download"/></svg>Bắt đầu tải</button></footer>
+  </div>
+</div>
+
+<!-- Confirm / delete dialog -->
+<div class="overlay" id="mDlg">
+  <div class="modal sm" role="alertdialog" aria-labelledby="dlgTitle">
+    <header><span id="dlgTitle"></span> <button class="x" data-close aria-label="Đóng"><svg class="ic"><use href="#i-x"/></svg></button></header>
+    <div class="body">
+      <p class="dlg-msg" id="dlgMsg"></p>
+      <label class="chk" id="dlgFileRow"><input type="checkbox" id="dlgFile"><span id="dlgFileText">Xóa luôn tệp đã tải trên ổ đĩa<small>Không thể khôi phục. Bỏ chọn để chỉ xóa khỏi danh sách và giữ lại tệp.</small></span></label>
+      <label class="chk" id="dlgRemRow"><input type="checkbox" id="dlgRem"><span>Ghi nhớ lựa chọn này, không hỏi lại<small>Có thể đổi lại trong Tùy chọn › Chung.</small></span></label>
+    </div>
+    <footer><button class="btn" id="dlgCancel">Hủy</button><button class="btn pri" id="dlgOk">Đồng ý</button></footer>
+  </div>
+</div>
+
+<!-- Settings -->
+<div class="overlay" id="mSet">
+  <div class="modal" role="dialog" aria-label="Tùy chọn">
+    <header>Tùy chọn <button class="x" data-close><svg class="ic"><use href="#i-x"/></svg></button></header>
+    <div class="body">
+      <div class="tabs"><button class="on" data-tab="general">Chung</button><button data-tab="download">Tải xuống</button><button data-tab="schedule">Lịch tải</button><button data-tab="browser">Trình duyệt</button></div>
+      <div class="pane on" id="p-general">
+        <div class="field"><label>Thư mục tải mặc định</label><div class="row"><input id="sDir" type="text"><button class="btn sm" id="sBrowse">Chọn…</button></div></div>
+        <label class="chk"><input type="checkbox" id="sCat"><span>Tự phân loại vào thư mục con<small>Video, Music, Compressed, Programs, Documents, Other</small></span></label>
+        <label class="chk"><input type="checkbox" id="sConfirm"><span>Hiện hộp thoại xác nhận khi bắt được link từ trình duyệt<small>Giống IDM: cho phép đổi tên, thư mục, chất lượng trước khi tải</small></span></label>
+        <div class="field"><label for="sDelete">Khi xóa một mục đã tải xong</label>
+          <select id="sDelete"><option value="ask">Luôn hỏi tôi (có thể chọn xóa luôn tệp)</option><option value="list">Chỉ xóa khỏi danh sách, giữ lại tệp</option><option value="files">Xóa cả tệp trên ổ đĩa</option></select>
+          <div class="hint">Mục chưa tải xong thì chỉ xóa dữ liệu tải dở của chính nó.</div></div>
+        <label class="chk"><input type="checkbox" id="sProg"><span>Hiện cửa sổ nhỏ theo dõi tiến độ khi bắt đầu tải<small>Giống IDM: tốc độ, thời gian còn lại, tạm dừng/hủy ngay trên cửa sổ đó</small></span></label>
+        <div class="field"><label for="sOnErr">Khi tải bị lỗi, cửa sổ tiến độ</label>
+          <select id="sOnErr"><option value="ask">Hỏi tôi một lần</option><option value="keep">Giữ lại hiển thị lỗi</option><option value="close">Tự đóng</option></select></div>
+        <label class="chk"><input type="checkbox" id="sNotify"><span>Thông báo khi tải xong</span></label>
+        <label class="chk"><input type="checkbox" id="sTray"><span>Đóng cửa sổ thì thu nhỏ xuống khay hệ thống<small>Để Vexlo tiếp tục bắt link từ trình duyệt</small></span></label>
+        <label class="chk"><input type="checkbox" id="sUpd"><span>Tự kiểm tra bản cập nhật mới<small>Lấy từ trang phát hành của dự án trên GitHub</small></span></label>
+        <label class="chk"><input type="checkbox" id="sStart"><span>Chạy cùng Windows</span></label>
+      </div>
+      <div class="pane" id="p-download">
+        <div class="grid2">
+          <div class="field"><label for="sConn">Số kết nối mỗi tệp (1–32)</label><input id="sConn" type="number" min="1" max="32"><div class="hint">8 là mức cân bằng. Một số máy chủ chặn khi quá nhiều kết nối.</div></div>
+          <div class="field"><label for="sMax">Số tệp tải cùng lúc (1–10)</label><input id="sMax" type="number" min="1" max="10"><div class="hint">Các tệp còn lại xếp hàng chờ, tải xong tệp nào thì tệp tiếp theo tự bắt đầu. Ít tệp cùng lúc thì mỗi tệp nhanh hơn.</div></div>
+        </div>
+        <div class="field"><label for="sLimit">Giới hạn tốc độ (KB/s, 0 = không giới hạn)</label><input id="sLimit" type="number" min="0" step="100"><div class="hint">Áp dụng cho tổng tốc độ của mọi tệp.</div></div>
+      </div>
+      <div class="pane" id="p-schedule">
+        <label class="chk"><input type="checkbox" id="sSchOn"><span>Bật lịch tải<small>Đến giờ bắt đầu, mọi tệp đang tạm dừng (ví dụ chọn "Tải sau") sẽ tự tải. Đến giờ dừng, các tệp đang tải được tạm dừng.</small></span></label>
+        <div class="grid2">
+          <div class="field"><label for="sSchStart">Bắt đầu lúc</label><input id="sSchStart" type="time"></div>
+          <div class="field"><label for="sSchStop">Dừng lúc (có thể để trống)</label><input id="sSchStop" type="time"></div>
+        </div>
+        <div class="field"><label>Các ngày trong tuần</label>
+          <div class="days">
+            <label><input type="checkbox" id="sDay1"> T2</label><label><input type="checkbox" id="sDay2"> T3</label><label><input type="checkbox" id="sDay3"> T4</label><label><input type="checkbox" id="sDay4"> T5</label>
+            <label><input type="checkbox" id="sDay5"> T6</label><label><input type="checkbox" id="sDay6"> T7</label><label><input type="checkbox" id="sDay0"> CN</label>
+          </div>
+          <div class="hint">Muốn tắt máy sau khi tải xong, chọn "Khi tải xong hết" ở thanh dưới cùng của cửa sổ chính. App cần đang chạy (có thể thu nhỏ xuống khay) đúng giờ hẹn.</div>
+        </div>
+      </div>
+      <div class="pane" id="p-browser">
+        <div class="field"><label>Trạng thái</label><div id="bStatus"></div></div>
+        <div class="grid2">
+          <div class="field"><label for="sPort">Cổng kết nối</label><input id="sPort" type="number" min="1024" max="65535"></div>
+          <div class="field"><label>Mã ghép nối</label><div class="code"><code id="sToken"></code><button class="btn sm" id="bCopyTok">Chép</button></div></div>
+        </div>
+        <div class="field"><label>Cài tiện ích Firefox</label>
+          <button class="btn sm" id="bExt"><svg class="ic"><use href="#i-folder"/></svg>Mở thư mục tiện ích</button>
+          <ol class="steps"><li>Mở Firefox, vào <b>about:debugging#/runtime/this-firefox</b></li><li>Chọn <b>Tải tiện ích tạm thời…</b> và chọn tệp <b>manifest.json</b> trong thư mục vừa mở</li><li>Nếu tiện ích báo không kết nối được, dán mã ghép nối ở trên vào trang cài đặt của tiện ích</li></ol>
+        </div>
+      </div>
+    </div>
+    <footer><button class="btn" data-close>Hủy</button><button class="btn pri" id="sSave">Lưu</button></footer>
+  </div>
+</div>
+
+<div class="ctx" id="ctx"></div>
+<div class="toast" id="toast"></div>
+<div class="drop" id="drop">Thả link vào đây để tải</div>
+
+<script src="common.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

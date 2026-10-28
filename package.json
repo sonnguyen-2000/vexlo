@@ -1,0 +1,86 @@
+{
+  "name": "vexlo",
+  "productName": "Vexlo",
+  "version": "0.1.0",
+  "description": "Vexlo - trình quản lý tải đa luồng kiểu IDM (Electron + Node.js)",
+  "author": "sonnguyen-2000",
+  "homepage": "https://github.com/YOUR_GITHUB_USERNAME/vexlo",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/YOUR_GITHUB_USERNAME/vexlo.git"
+  },
+  "main": "src/main/main.js",
+  "license": "MIT",
+  "scripts": {
+    "start": "electron .",
+    "test": "node --test \"test/*.test.js\"",
+    "dist": "node tools/make-edge.js && electron-builder --win nsis --publish never",
+    "release": "node tools/make-edge.js && electron-builder --win nsis --publish always"
+  },
+  "devDependencies": {
+    "electron": "^33.0.0",
+    "electron-builder": "^25.1.8"
+  },
+  "build": {
+    "appId": "dev.vexlo.app",
+    "productName": "Vexlo",
+    "files": [
+      "src/**/*",
+      "build/icon.png",
+      "build/tray.png",
+      "package.json"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "build/icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "include": "build/installer.nsh",
+      "shortcutName": "Vexlo",
+      "runAfterFinish": true,
+      "deleteAppDataOnUninstall": true,
+      "installerIcon": "build/icon.ico",
+      "uninstallerIcon": "build/icon.ico"
+    },
+    "extraResources": [
+      {
+        "from": "extension",
+        "to": "extension"
+      },
+      {
+        "from": "native",
+        "to": "native"
+      },
+      {
+        "from": "extension-edge",
+        "to": "extension-edge"
+      }
+    ],
+    "asarUnpack": [
+      "node_modules/ffmpeg-static/**"
+    ],
+    "artifactName": "Vexlo-Setup-${version}.${ext}",
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "sonnguyen-2000",
+        "repo": "vexlo",
+        "releaseType": "release"
+      }
+    ]
+  },
+  "dependencies": {
+    "ffmpeg-static": "^5.2.0",
+    "electron-updater": "^6.3.9"
+  }
+}

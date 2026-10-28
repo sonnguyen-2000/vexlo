@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Vexlo</title>
+<style>
+  :root{color-scheme:light dark;--bg:#fff;--fg:#1b1f24;--mut:#6b7480;--line:#e3e6ea;--ok:#169a50;--bad:#c0392b}
+  @media (prefers-color-scheme:dark){:root{--bg:#1c1f24;--fg:#e8eaed;--mut:#9aa3ad;--line:#2e333a}}
+  body{margin:0;background:var(--bg);color:var(--fg);font:14px/1.5 system-ui,'Segoe UI',sans-serif}
+  main{max-width:560px;margin:0 auto;padding:28px 20px}
+  h1{font-size:20px;margin:0 0 18px;display:flex;gap:10px;align-items:center}
+  h1 img{width:28px;height:28px;border-radius:6px}
+  label.row{display:flex;gap:10px;align-items:center;padding:9px 0;border-bottom:1px solid var(--line)}
+  .field{padding:12px 0;border-bottom:1px solid var(--line)}
+  .field>span{display:block;margin-bottom:6px;color:var(--mut);font-size:13px}
+  input[type=text],input[type=number],textarea{width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:6px;background:transparent;color:inherit;font:inherit}
+  textarea{min-height:80px;resize:vertical}
+  .bar{display:flex;gap:10px;align-items:center;margin-top:18px}
+  button{border:0;border-radius:6px;padding:8px 16px;background:var(--ok);color:#fff;font:600 13px system-ui;cursor:pointer}
+  button.sec{background:transparent;color:var(--fg);border:1px solid var(--line)}
+  #msg{color:var(--mut)}
+  #msg.ok{color:var(--ok)} #msg.bad{color:var(--bad)}
+</style>
+</head>
+<body>
+<main>
+  <h1><img src="icons/icon.svg" alt=""> Vexlo</h1>
+  <label class="row"><input type="checkbox" id="enabled"><span data-t="enabled"></span></label>
+  <label class="row"><input type="checkbox" id="takeover"><span data-t="takeover"></span></label>
+  <label class="row"><input type="checkbox" id="floating"><span data-t="floating"></span></label>
+  <div class="field"><span data-t="minSize"></span><input type="number" id="minMediaKB" min="0" step="10"></div>
+  <div class="field"><span data-t="minTake"></span><input type="number" id="minTakeoverKB" min="0" step="10"></div>
+  <div class="field"><span data-t="exclude"></span><textarea id="excludeDomains" placeholder="example.com"></textarea></div>
+  <div class="field"><span data-t="port"></span><input type="number" id="port" min="1024" max="65535"></div>
+  <div class="field"><span data-t="token"></span><input type="text" id="token" autocomplete="off" spellcheck="false"></div>
+  <div class="bar"><button id="save"></button><button class="sec" id="test"></button><span id="msg"></span></div>
+</main>
+<script src="lib/i18n.js"></script>
+<script src="options.js"></script>
+</body>
+</html>
