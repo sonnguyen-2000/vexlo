@@ -1,7 +1,7 @@
 {
   "name": "vexlo",
   "productName": "Vexlo",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Vexlo - trình quản lý tải đa luồng kiểu IDM (Electron + Node.js)",
   "author": "sonnguyen-2000",
   "homepage": "https://github.com/YOUR_GITHUB_USERNAME/vexlo",

@@ -36,8 +36,8 @@ jobs:
       - name: Attach the browser extensions to the release
         shell: pwsh
         run: |
-          Compress-Archive -Path extension -DestinationPath Vexlo-firefox-extension.zip -Force
-          Compress-Archive -Path extension-edge -DestinationPath Vexlo-edge-extension.zip -Force
+          Compress-Archive -Path extension\* -DestinationPath Vexlo-firefox-extension.zip -Force
+          Compress-Archive -Path extension-edge\* -DestinationPath Vexlo-edge-extension.zip -Force
           gh release upload "${{ github.ref_name }}" Vexlo-firefox-extension.zip Vexlo-edge-extension.zip --clobber
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

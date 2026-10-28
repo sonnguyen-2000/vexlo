@@ -293,18 +293,36 @@ async function sendMediaItem(tabId, id) {
 
 const handled = new Set();
 
+// Why a download was or was not taken over is logged to the extension console ("[Vexlo]"), so a missed download can be explained.
+const dbg = (...a) => { try { console.info('[Vexlo]', ...a); } catch { /* no console */ } };
+let lastTakeoverNotice = 0;
+function noticeOnce(message) {
+  if (Date.now() - lastTakeoverNotice < 20000) { return; }
+  lastTakeoverNotice = Date.now();
+  notify(message);
+}
+
 browser.downloads.onCreated.addListener(async (item) => {
   try {
     await settingsReady; // a download that fires right at browser start must still honour the user's settings
-    if (!settings.enabled || !settings.takeover || item.incognito || handled.has(item.id)) { return; }
     const url = item.finalUrl || item.url;
-    if (!/^https?:\/\//i.test(url) || excluded(url)) { return; }
-    if (settings.minTakeoverKB > 0 && item.totalBytes > 0 && item.totalBytes < settings.minTakeoverKB * 1024) { return; }
+    if (!settings.enabled || !settings.takeover) { dbg('download left to the browser: takeover is off', url); return; }
+    if (item.incognito) { dbg('download left to the browser: private window', url); return; }
+    if (handled.has(item.id)) { return; }
+    // Firefox also reports downloads from earlier sessions (the history) when the extension starts: only take over NEW ones.
+    if (item.state && item.state !== 'in_progress') { dbg('download left alone: already finished or stopped (history)', item.state, url); return; }
+    const startedAt = Date.parse(item.startTime || '');
+    if (Number.isFinite(startedAt) && Date.now() - startedAt > 60 * 1000) { dbg('download left alone: started long ago (history)', url); return; }
+    if (!/^https?:\/\//i.test(url)) { dbg('download left to the browser: not an http(s) link (blob:/data:/file:)', String(url).slice(0, 80)); return; }
+    if (excluded(url)) { dbg('download left to the browser: domain is excluded in options', url); return; }
+    if (settings.minTakeoverKB > 0 && item.totalBytes > 0 && item.totalBytes < settings.minTakeoverKB * 1024) { dbg('download left to the browser: smaller than the minimum size', url); return; }
     handled.add(item.id);
     try { await browser.downloads.pause(item.id); } catch { /* may already be finishing */ }
     const st = await appStatus(true);
     if (!st.ok) {
+      dbg('download left to the browser: Vexlo is not reachable', st.reason || '', url);
       try { await browser.downloads.resume(item.id); } catch { /* ignore */ }
+      noticeOnce(st.reason === 'unauthorized' ? t('errToken') : t('noApp'));
       return;
     }
     const cached = urlHeaders.get(item.finalUrl)?.headers || urlHeaders.get(item.url)?.headers || {};
@@ -318,11 +336,16 @@ browser.downloads.onCreated.addListener(async (item) => {
     }
     const base = item.filename ? item.filename.split(/[\\/]/).pop() : '';
     await sendToApp([{ url, headers, filename: base || undefined, page: item.referrer || '' }], { show: true });
+    dbg('download handed to Vexlo', url);
     try { await browser.downloads.cancel(item.id); } catch { /* ignore */ }
+    // Firefox keeps the half-written "name.part" (and an empty placeholder file) of a cancelled download: remove them too.
+    try { await browser.downloads.removeFile(item.id); } catch { /* nothing to remove, or not supported for unfinished downloads */ }
     try { await browser.downloads.erase({ id: item.id }); } catch { /* ignore */ }
   } catch (err) {
-    // Anything unexpected: never lose the user's download.
+    // Anything unexpected: never lose the user's download, but say why the browser kept it.
+    dbg('takeover failed, the browser keeps the download:', err && err.message);
     try { await browser.downloads.resume(item.id); } catch { /* ignore */ }
+    noticeOnce(err && err.message ? err.message : t('noApp'));
   }
 });
 
