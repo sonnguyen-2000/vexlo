@@ -21,7 +21,9 @@ svg.ic{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:2;strok
 button{font:inherit;color:inherit}
 
 /* ---------- layout ---------- */
-.app{display:grid;grid-template-rows:auto 1fr auto;height:100vh}
+/* On big screens the whole window is scaled up (see applyScale in app.js) so text stays comfortable to read. */
+body{zoom:var(--z,1)}
+.app{display:grid;grid-template-rows:auto 1fr auto;height:calc(100vh / var(--z,1))}
 .toolbar{display:flex;align-items:center;gap:2px;padding:8px 12px;background:var(--panel);border-bottom:1px solid var(--line)}
 .tb{display:flex;flex-direction:column;align-items:center;gap:3px;min-width:68px;padding:7px 8px 5px;border:0;border-radius:8px;background:transparent;cursor:pointer;color:var(--fg)}
 .tb svg.ic{width:22px;height:22px}
@@ -53,6 +55,12 @@ button{font:inherit;color:inherit}
 table{width:100%;border-collapse:separate;border-spacing:0;table-layout:fixed}
 thead th{position:sticky;top:0;z-index:2;padding:9px 10px;text-align:left;font-size:11.5px;font-weight:600;color:var(--mut);background:var(--panel2);border-bottom:1px solid var(--line);cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 thead th:hover{color:var(--fg)}
+/* drag handle on the left edge of a column header: resizes that column (the file name column takes the rest) */
+.rz{position:absolute;left:0;top:0;bottom:0;width:8px;cursor:col-resize;z-index:3}
+.rz::after{content:"";position:absolute;left:0;top:22%;bottom:22%;width:1px;background:var(--line);transition:background .12s,width .12s}
+.rz:hover::after,.rz.drag::after{width:2px;background:var(--acc)}
+body.resizing{cursor:col-resize;user-select:none}
+body.resizing *{cursor:col-resize!important}
 thead th .arr{opacity:.7;margin-left:3px}
 tbody td{padding:0 10px;height:54px;border-bottom:1px solid var(--line);overflow:hidden;white-space:nowrap;text-overflow:ellipsis;vertical-align:middle}
 tbody tr{cursor:default}

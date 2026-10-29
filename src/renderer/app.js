@@ -67,6 +67,72 @@
     }
   }
 
+  // ---------------------------------------------------------------- resizable columns + big-screen scale
+
+  const COL_DEF = { size: 90, progress: 190, eta: 100, speed: 96, createdAt: 124 };
+  const COL_MIN = { size: 64, progress: 120, eta: 70, speed: 70, createdAt: 80 };
+  const COL_MAX = 600;
+  let colW = null;
+
+  function loadColW() {
+    let saved = {};
+    try { saved = JSON.parse(localStorage.getItem('vexlo.colw') || '{}') || {}; } catch { saved = {}; }
+    const W = $('tw').clientWidth || 900;
+    // Default widths grow with the window; a width the user dragged to is kept as is.
+    const k = Math.max(1, Math.min(1.7, W / 950));
+    colW = {};
+    for (const key of Object.keys(COL_DEF)) {
+      const v = Number(saved[key]);
+      colW[key] = Number.isFinite(v) && v >= COL_MIN[key] ? Math.min(COL_MAX, v) : Math.round(COL_DEF[key] * k);
+    }
+  }
+  function saveColW() { try { localStorage.setItem('vexlo.colw', JSON.stringify(colW)); } catch { /* private mode: not remembered */ } }
+
+  function applyColW() {
+    const cg = $('cols');
+    if (!cg.children.length) { for (let i = 0; i < COLS.length; i++) { cg.appendChild(document.createElement('col')); } }
+    let sum = 0;
+    COLS.forEach((c, i) => {
+      const col = cg.children[i];
+      if (c.key === 'filename') { col.style.width = 'auto'; return; }
+      col.style.width = colW[c.key] + 'px';
+      sum += colW[c.key];
+    });
+    $('tw').firstElementChild.style.minWidth = (sum + 200) + 'px'; // the name column never gets squeezed below 200px: scroll instead
+  }
+
+  const zoomNow = () => Number(getComputedStyle(document.documentElement).getPropertyValue('--z')) || 1;
+
+  function makeHandle(key) {
+    const h = document.createElement('span');
+    h.className = 'rz';
+    h.addEventListener('click', (e) => e.stopPropagation());
+    h.addEventListener('dblclick', (e) => { e.stopPropagation(); colW[key] = Math.round(COL_DEF[key] * Math.max(1, Math.min(1.7, ($('tw').clientWidth || 900) / 950))); applyColW(); saveColW(); });
+    h.addEventListener('pointerdown', (e) => {
+      e.preventDefault(); e.stopPropagation();
+      h.setPointerCapture(e.pointerId);
+      const x0 = e.clientX; const w0 = colW[key]; const z = zoomNow();
+      h.classList.add('drag'); document.body.classList.add('resizing');
+      const move = (ev) => {
+        // dragging the left edge to the left widens this column and narrows the file name column
+        colW[key] = Math.round(Math.max(COL_MIN[key], Math.min(COL_MAX, w0 - (ev.clientX - x0) / z)));
+        applyColW();
+      };
+      const up = () => {
+        h.removeEventListener('pointermove', move); h.removeEventListener('pointerup', up); h.removeEventListener('pointercancel', up);
+        h.classList.remove('drag'); document.body.classList.remove('resizing'); saveColW();
+      };
+      h.addEventListener('pointermove', move); h.addEventListener('pointerup', up); h.addEventListener('pointercancel', up);
+    });
+    return h;
+  }
+
+  function applyScale() {
+    const w = window.innerWidth;
+    const z = Math.max(1, Math.min(1.35, Math.round((1 + (w - 1500) / 1500) * 20) / 20));
+    document.documentElement.style.setProperty('--z', String(z));
+  }
+
   function buildHead() {
     const tr = $('head');
     tr.textContent = '';
@@ -76,6 +142,7 @@
       th.dataset.key = c.key;
       th.innerHTML = '<span></span><span class="arr"></span>';
       th.firstChild.textContent = c.label;
+      if (c.key !== 'filename') { th.appendChild(makeHandle(c.key)); }
       th.addEventListener('click', () => {
         if (view.sort === c.key) { view.dir = -view.dir; } else { view.sort = c.key; view.dir = c.key === 'filename' ? 1 : -1; }
         refresh();
@@ -382,8 +449,9 @@
     }
     ctx.classList.add('show');
     const r = ctx.getBoundingClientRect();
-    ctx.style.left = Math.max(4, Math.min(x, window.innerWidth - r.width - 6)) + 'px';
-    ctx.style.top = Math.max(4, Math.min(y, window.innerHeight - r.height - 6)) + 'px';
+    const z = zoomNow(); // the page is scaled on big screens: convert window pixels to page pixels
+    ctx.style.left = Math.max(4, Math.min(x / z, (window.innerWidth - r.width - 6) / z)) + 'px';
+    ctx.style.top = Math.max(4, Math.min(y / z, (window.innerHeight - r.height - 6) / z)) + 'px';
   }
   function hideMenu() { $('ctx').classList.remove('show'); }
   document.addEventListener('mousedown', (e) => { if (!$('ctx').contains(e.target)) { hideMenu(); } });
@@ -579,7 +647,11 @@
   bridge.on('app:status', (i) => { info = i; schedule(); });
 
   async function init() {
+    applyScale();
+    window.addEventListener('resize', () => { applyScale(); });
     buildSide();
+    loadColW();
+    applyColW();
     buildHead();
     [settings, info] = await Promise.all([bridge.getSettings(), bridge.appInfo()]);
     for (const t of await bridge.list()) { items.set(t.id, t); }
