@@ -34,3 +34,18 @@
     RMDir /r "$INSTDIR"
   ${endIf}
 !macroend
+
+; Asks once, on a fresh interactive install only (not on updates or silent installs): start Vexlo with Windows?
+; The answer is left as a flag file; the app turns it into its "Start with Windows" setting on first run.
+!macro customInstall
+  ${ifNot} ${isUpdated}
+  ${ifNot} ${Silent}
+    MessageBox MB_YESNO|MB_ICONQUESTION "Start Vexlo automatically when Windows starts?$\r$\n(It runs quietly in the tray. You can change this later in Settings.)" IDNO vexlo_no_autostart
+      CreateDirectory "$APPDATA\Vexlo"
+      FileOpen $0 "$APPDATA\Vexlo\autostart.flag" w
+      FileWrite $0 "1"
+      FileClose $0
+    vexlo_no_autostart:
+  ${endIf}
+  ${endIf}
+!macroend

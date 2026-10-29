@@ -72,6 +72,18 @@ function clampSettings(s) {
   };
 }
 
+/** The installer can ask "start Vexlo with Windows?" and leaves a flag file; the app turns it into the real setting once. */
+function applyInstallerOptions() {
+  const flag = path.join(app.getPath('userData'), 'autostart.flag');
+  try {
+    if (fs.existsSync(flag)) {
+      settings = clampSettings({ ...settings, startWithOS: true });
+      saveSettings();
+      fs.unlinkSync(flag);
+    }
+  } catch { /* ignore */ }
+}
+
 function loadSettings() {
   let saved = {};
   try { saved = JSON.parse(fs.readFileSync(settingsFile(), 'utf8')); } catch { /* first run */ }
@@ -382,6 +394,9 @@ function registerIpc() {
     return settings;
   });
   ipcMain.handle('app:info', () => appInfo());
+  ipcMain.handle('update:check', () => checkUpdateNow());
+  ipcMain.handle('update:status', () => updStatus);
+  ipcMain.handle('update:install', () => { if (updater && updStatus.state === 'ready') { quitting = true; updater.quitAndInstall(false, true); } return true; });
   ipcMain.handle('app:openExtensionFolder', () => shell.openPath(EXT_DIR));
   ipcMain.handle('dialog:chooseFolder', async (e, defaultPath) => {
     const win = BrowserWindow.fromWebContents(e.sender);
@@ -552,13 +567,46 @@ function migrateOldData() {
 }
 
 /** Updates come from the GitHub release of this project (see docs/PUBLISHING.md). Never fatal: no updater, no network, dev run. */
+// ------------------------------------------------------------------ updates
+
+let updater = null;
+let updStatus = { state: 'idle', version: '', message: '' }; // idle | checking | available | downloading | ready | latest | error | dev
+function setUpd(patch) { updStatus = { ...updStatus, ...patch }; broadcast('update:status', updStatus); }
+
+function getUpdater() {
+  if (updater) { return updater; }
+  const { autoUpdater } = require('electron-updater');
+  // Everything the updater does is written to update.log (next to settings.json) so a failed update can be diagnosed.
+  const logFile = path.join(app.getPath('userData'), 'update.log');
+  const log = (m) => { try { fs.appendFileSync(logFile, `${new Date().toISOString()} ${m}\n`); } catch { /* ignore */ } };
+  log(`running ${VERSION}`);
+  autoUpdater.on('checking-for-update', () => { log('checking'); setUpd({ state: 'checking', message: '' }); });
+  autoUpdater.on('update-available', (i) => { log('update available: ' + i.version); setUpd({ state: 'downloading', version: i.version }); });
+  autoUpdater.on('update-not-available', (i) => { log('no update (latest ' + i.version + ')'); setUpd({ state: 'latest', version: i.version }); });
+  autoUpdater.on('download-progress', (p) => { setUpd({ state: 'downloading', message: String(Math.round(p.percent)) }); });
+  autoUpdater.on('update-downloaded', (i) => { log('downloaded ' + i.version + ', installs when the app quits'); setUpd({ state: 'ready', version: i.version }); });
+  autoUpdater.on('error', (e) => { const m = String(e && e.message || e).split('\n')[0]; log('ERROR: ' + m); setUpd({ state: 'error', message: m }); });
+  updater = autoUpdater;
+  return updater;
+}
+
+/** Manual "check for updates": resolves with the final state (latest / downloading / ready / error / dev). */
+async function checkUpdateNow() {
+  if (!app.isPackaged) { setUpd({ state: 'dev', message: '' }); return updStatus; }
+  try {
+    const u = getUpdater();
+    const r = await u.checkForUpdates();
+    if (r && r.updateInfo && updStatus.state === 'checking') { setUpd({ state: 'latest', version: r.updateInfo.version }); }
+  } catch (e) { setUpd({ state: 'error', message: String(e && e.message || e).split('\n')[0] }); }
+  return updStatus;
+}
+
 function startAutoUpdate() {
   if (!app.isPackaged || !settings.autoUpdate) { return; }
   try {
-    const { autoUpdater } = require('electron-updater');
-    autoUpdater.on('error', () => {});
-    autoUpdater.checkForUpdatesAndNotify().catch(() => {});
-    setInterval(() => { if (settings.autoUpdate) { autoUpdater.checkForUpdatesAndNotify().catch(() => {}); } }, 6 * 3600 * 1000);
+    const u = getUpdater();
+    u.checkForUpdatesAndNotify().catch(() => {});
+    setInterval(() => { if (settings.autoUpdate) { u.checkForUpdatesAndNotify().catch(() => {}); } }, 6 * 3600 * 1000);
   } catch { /* electron-updater not installed */ }
 }
 
@@ -571,6 +619,7 @@ function main() {
   app.whenReady().then(async () => {
     migrateOldData();
     loadSettings();
+    applyInstallerOptions();
     fs.mkdirSync(settings.downloadDir, { recursive: true });
     manager = new EngineClient({
       dataDir: app.getPath('userData'), downloadDir: settings.downloadDir, maxConcurrent: settings.maxConcurrent,

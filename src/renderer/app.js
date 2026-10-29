@@ -477,6 +477,28 @@
   }));
   $('sBrowse').addEventListener('click', async () => { const d = await bridge.chooseFolder($('sDir').value); if (d) { $('sDir').value = d; } });
   $('bExt').addEventListener('click', () => bridge.openExtensionFolder());
+  // ---- manual update check
+  let ver = '';
+  const showUpd = (u) => {
+    if (!u) { return; }
+    const msg = {
+      idle: '', checking: T('Đang kiểm tra…'), latest: T('Bạn đang dùng bản mới nhất ({v})', { v: ver }),
+      downloading: T('Đang tải bản {v}…', { v: u.version }) + (u.message ? ' ' + u.message + '%' : ''),
+      ready: T('Đã tải bản {v}. Bấm để khởi động lại và cập nhật.', { v: u.version }),
+      error: T('Không kiểm tra được: {e}', { e: u.message }), dev: T('Bản chạy từ mã nguồn không tự cập nhật.'),
+    }[u.state] || '';
+    $('updMsg').textContent = msg;
+    $('bUpd').textContent = u.state === 'ready' ? T('Khởi động lại để cập nhật') : T('Kiểm tra cập nhật');
+    $('bUpd').disabled = u.state === 'checking';
+    $('bUpd').dataset.ready = u.state === 'ready' ? '1' : '';
+  };
+  bridge.appInfo().then((i) => { ver = i.version; }).catch(() => {});
+  bridge.on('update:status', showUpd);
+  $('bUpd').addEventListener('click', async () => {
+    if ($('bUpd').dataset.ready) { bridge.updateInstall(); return; }
+    showUpd({ state: 'checking' });
+    showUpd(await bridge.updateCheck());
+  });
   $('bCopyTok').addEventListener('click', async () => {
     try { await navigator.clipboard.writeText(settings.token || ''); toast(T('Đã chép mã ghép nối')); } catch { toast(T('Không chép được'), true); }
   });

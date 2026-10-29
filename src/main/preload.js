@@ -1,7 +1,7 @@
 'use strict';
 const { contextBridge, ipcRenderer } = require('electron');
 
-const EVENTS = new Set(['dl:update', 'dl:added', 'dl:removed', 'settings:changed', 'app:status', 'confirm:info', 'after:changed']);
+const EVENTS = new Set(['dl:update', 'dl:added', 'dl:removed', 'settings:changed', 'app:status', 'confirm:info', 'after:changed', 'update:status']);
 const call = (ch) => (...args) => ipcRenderer.invoke(ch, ...args);
 
 // The renderer never gets Node or Electron objects, only this narrow, validated surface.
@@ -21,6 +21,9 @@ contextBridge.exposeInMainWorld('vexlo', {
   getSettings: call('settings:get'),
   setSettings: call('settings:set'),
   appInfo: call('app:info'),
+  updateCheck: call('update:check'),
+  updateStatus: call('update:status'),
+  updateInstall: call('update:install'),
   openExtensionFolder: call('app:openExtensionFolder'),
   chooseFolder: call('dialog:chooseFolder'),
   confirmGet: call('confirm:get'),

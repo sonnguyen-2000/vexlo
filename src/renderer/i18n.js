@@ -84,6 +84,10 @@
     'Đã chép mã ghép nối': 'Pairing code copied', 'Không chép được': 'Could not copy', 'Đã lưu tùy chọn': 'Settings saved', 'Đã xóa {n} tải bị lỗi': 'Removed {n} failed downloads',
     'Đã xóa các tệp đã xong khỏi danh sách': 'Finished files removed from the list',
     'Sẽ thực hiện khi tệp cuối cùng tải xong (có đếm ngược 60 giây để hủy)': 'Will run when the last file finishes (with a 60-second countdown to cancel)',
+    'Cập nhật': 'Updates', 'Kiểm tra cập nhật': 'Check for updates', 'Đang kiểm tra…': 'Checking…',
+    'Bạn đang dùng bản mới nhất ({v})': 'You are on the latest version ({v})', 'Đang tải bản {v}…': 'Downloading version {v}…',
+    'Đã tải bản {v}. Bấm để khởi động lại và cập nhật.': 'Version {v} is ready. Click to restart and update.', 'Khởi động lại để cập nhật': 'Restart to update',
+    'Không kiểm tra được: {e}': 'Could not check: {e}', 'Bản chạy từ mã nguồn không tự cập nhật.': 'A build run from source does not update itself.',
     // ---- progress window
     'Đã tải': 'Downloaded', 'Tải bị lỗi.': 'Download failed.', 'Lần sau khi tải lỗi:': 'Next time a download fails:', 'Giữ cửa sổ': 'Keep window', 'Tự đóng khi xong': 'Close when finished',
     'Hủy tải': 'Cancel download', 'Ẩn': 'Hide', 'Mở thư mục': 'Open folder', 'Đã tải xong': 'Download complete', 'Tất cả tệp đã tải xong.': 'All files have finished downloading.', 'Thực hiện ngay': 'Do it now',
