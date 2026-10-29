@@ -476,3 +476,52 @@ test('app not running and no host: still reported as not running (no hang)', asy
   assert.equal(st.ok, false);
   assert.ok(Date.now() - t0 < 20000);
 });
+
+// ---------------------------------------------------------------- several tabs at once
+
+test('media of different tabs never mix, and mediaCount is per tab (button only where there is something to download)', async () => {
+  const { api } = await startApp();
+  const tabs = { ...TAB, 7: { url: 'https://other.example/clip', title: 'Other clip', incognito: false }, 8: { url: 'https://empty.example/', title: 'Nothing yet', incognito: false } };
+  const bg = await loadBackground({ port: api.port, tabs });
+  await sniff(bg, { tabId: 5, url: 'https://cdn.one/a.mp4', resp: { 'content-type': 'video/mp4', 'content-length': String(9 * MB) } });
+  await sniff(bg, { tabId: 7, url: 'https://cdn.two/b.mp4', resp: { 'content-type': 'video/mp4', 'content-length': String(8 * MB) } });
+  await sniff(bg, { tabId: 7, url: 'https://cdn.two/c.mp4', resp: { 'content-type': 'video/mp4', 'content-length': String(7 * MB) } });
+  const l5 = await bg.send({ type: 'getMedia' }, { tab: { id: 5 } });
+  const l7 = await bg.send({ type: 'getMedia' }, { tab: { id: 7 } });
+  assert.deepEqual(plain(l5.map((x) => x.url)), ['https://cdn.one/a.mp4']);
+  assert.deepEqual(plain(l7.map((x) => x.url)).sort(), ['https://cdn.two/b.mp4', 'https://cdn.two/c.mp4']);
+  assert.equal(await bg.send({ type: 'mediaCount' }, { tab: { id: 5 } }), 1);
+  assert.equal(await bg.send({ type: 'mediaCount' }, { tab: { id: 7 } }), 2);
+  assert.equal(await bg.send({ type: 'mediaCount' }, { tab: { id: 8 } }), 0, 'a tab with nothing captured gets no button');
+  // sending an item from tab 7 can never pick up tab 5's entry
+  const bad = await bg.send({ type: 'send', id: l5[0].id }, { tab: { id: 7 } });
+  assert.equal(bad.ok, false);
+  await api.close();
+});
+
+// ---------------------------------------------------------------- "Refresh link": re-capture of a failed download's page
+
+test('refresh link: when the app waits for a fresh link of this page, the new capture is sent by itself (once)', async () => {
+  const manager = fakeManager();
+  let pending = [{ page: 'https://site.example/watch/42', kind: 'file' }];
+  const api = createApi(manager, { port: 0, getRefreshPending: () => pending });
+  await api.listen();
+  opened.push(api);
+  const bg = await loadBackground({ port: api.port, tabs: TAB });
+  // wrong kind on the right page and the right kind on another page: nothing is sent
+  await sniff(bg, { tabId: 5, url: 'https://cdn.example/s/master.m3u8', resp: { 'content-type': 'application/vnd.apple.mpegurl' } });
+  await sleep(120);
+  assert.equal(manager.added.length, 0);
+  await sniff(bg, { tabId: 5, url: 'https://cdn.example/v/fresh.mp4?tok=NEW', resp: { 'content-type': 'video/mp4', 'content-length': String(9 * MB) } });
+  await sleep(200);
+  assert.equal(manager.added.length, 1);
+  assert.equal(manager.added[0].url, 'https://cdn.example/v/fresh.mp4?tok=NEW');
+  assert.equal(manager.added[0].meta.page, 'https://site.example/watch/42');
+  // the app no longer waits (it took the link): further captures stay manual
+  pending = [];
+  await sleep(1600);
+  await sniff(bg, { tabId: 5, url: 'https://cdn.example/v/other.mp4', resp: { 'content-type': 'video/mp4', 'content-length': String(9 * MB) } });
+  await sleep(200);
+  assert.equal(manager.added.length, 1);
+  await api.close();
+});

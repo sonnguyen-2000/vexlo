@@ -13,7 +13,7 @@ const EXT_ORIGIN = /^(moz-extension|chrome-extension|extension):\/\//i;
  *  - browser requests must carry an extension Origin (pages cannot forge Origin)
  *  - non-browser clients (no Origin) must send the X-Vexlo-Token header
  */
-function createApi(manager, { port = 6877, token = '', onAdd, onShowWindow, getSettings, version = '0.1.0' } = {}) {
+function createApi(manager, { port = 6877, token = '', onAdd, onShowWindow, getSettings, getRefreshPending, version = '0.1.0' } = {}) {
   const clients = new Set();
 
   const send = (res, status, obj, extra = {}) => {
@@ -78,6 +78,10 @@ function createApi(manager, { port = 6877, token = '', onAdd, onShowWindow, getS
       }
       if (req.method === 'GET' && p === '/api/list') {
         return send(res, 200, { items: manager.list() }, corsHeaders);
+      }
+      // Pages of failed downloads waiting for a fresh link ("Refresh link" in the app): the extension re-captures them by itself.
+      if (req.method === 'GET' && p === '/api/refresh') {
+        return send(res, 200, { pages: getRefreshPending ? getRefreshPending() : [] }, corsHeaders);
       }
       if (req.method === 'GET' && p === '/api/settings') {
         return send(res, 200, getSettings ? getSettings() : {}, corsHeaders);

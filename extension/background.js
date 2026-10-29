@@ -207,6 +207,28 @@ async function addMedia(tabId, d, c, sent) {
   while (map.size > MAX_PER_TAB) { map.delete(map.keys().next().value); }
   updateBadge(tabId);
   if (item.kind === 'hls' && !item.info && !item.inspecting) { inspectHls(tabId, item); }
+  maybeAutoRefresh(tabId, item);
+}
+
+// "Refresh link" in the app opens the original page of a failed download; when this tab captures the same kind of media on
+// that page, the fresh link is sent straight away (the app replaces the failed attempt).
+let refreshCache = { at: 0, pages: [] };
+const stripHash = (u) => String(u || '').split('#')[0];
+async function maybeAutoRefresh(tabId, item) {
+  try {
+    await settingsReady;
+    if (!settings.enabled || item.autoSent) { return; }
+    if (Date.now() - refreshCache.at > 1500) {
+      const r = await fetch(appUrl('/api/refresh'), { headers: appHeaders(), cache: 'no-store' });
+      refreshCache = { at: Date.now(), pages: r.ok ? ((await r.json()).pages || []) : [] };
+    }
+    const hit = refreshCache.pages.find((p) => stripHash(p.page) === stripHash(item.page) && p.kind === item.kind);
+    if (!hit) { return; }
+    item.autoSent = true;
+    refreshCache = { at: 0, pages: [] }; // ask the app again next time: this request is now taken
+    if (item.kind === 'hls') { await new Promise((ok) => setTimeout(ok, 1500)); } // let the playlist inspection finish first
+    await sendMediaItem(tabId, item.id);
+  } catch { /* no app / not paired: the normal button still works */ }
 }
 
 // ---------------------------------------------------------------- playlist inspection (name / duration / quality like IDM)

@@ -156,7 +156,7 @@ async function startApi() {
   apiError = '';
   api = createApi(manager, {
     port: settings.port, token: settings.token, version: VERSION,
-    onAdd: handleExternalAdd, onShowWindow: () => {}, getSettings: () => ({ confirm: settings.confirm }),
+    onAdd: handleExternalAdd, getRefreshPending, onShowWindow: () => {}, getSettings: () => ({ confirm: settings.confirm }),
   });
   try { await api.listen(); } catch (e) {
     apiError = e.code === 'EADDRINUSE' ? T('Cổng {port} đang được chương trình khác dùng', { port: settings.port }) : String(e.message || e);
@@ -183,19 +183,38 @@ function notifyDuplicate(task) {
 }
 
 /** Items coming from the browser: show an IDM-style confirmation window unless the user turned it off. */
+// ---- "Refresh link": a failed download whose signed link expired waits here for a fresh capture of its page
+const refreshWanted = new Map(); // task id -> { page, kind, at }
+const stripHash = (u) => String(u || '').split('#')[0];
+function getRefreshPending() {
+  const out = [];
+  for (const [id, w] of refreshWanted) {
+    const t = manager && manager.get(id);
+    if (!t || t.state.status !== 'error' || Date.now() - w.at > 30 * 60 * 1000) { refreshWanted.delete(id); continue; }
+    out.push({ page: w.page, kind: w.kind });
+  }
+  return out;
+}
+function takeRefresh(page) {
+  for (const [id, w] of refreshWanted) { if (stripHash(w.page) === stripHash(page)) { refreshWanted.delete(id); return id; } }
+  return '';
+}
+
 function handleExternalAdd(items) {
   const ask = settings.confirm && items.length <= 3;
   return items.map((it) => {
+    const refreshed = takeRefresh(it.meta && it.meta.page ? it.meta.page : it.page);
     const kind = detectKind(it.url, it.kind);
     const dir = categoryDir(it.filename || it.url, kind);
     const dup = findDuplicate(manager.list(), { url: it.url, filename: it.filename, dir, page: it.page, kind }, { exists: fs.existsSync });
     if (dup && dup.type === 'active') { notifyDuplicate(dup.task); return dup.task.id; } // already in the list: never download twice
     const replaceId = dup && dup.type === 'error' ? dup.task.id : undefined; // failed before: replace it, keep the plain name
     const filename = it.filename || (replaceId ? dup.task.filename : undefined);
+    const askNow = ask && !refreshed; // a link the user asked to refresh starts at once, no confirmation window
     const id = manager.add({
-      ...it, filename, replaceId, dir, connections: settings.connections, start: !ask, pending: ask,
+      ...it, filename, replaceId, dir, connections: settings.connections, start: !askNow, pending: askNow,
     });
-    if (ask) { openConfirm(id, { replaced: !!replaceId }); } else if (items.length <= 3) { openProgress(id); }
+    if (askNow) { openConfirm(id, { replaced: !!replaceId }); } else if (items.length <= 3) { openProgress(id); }
     return id;
   });
 }
@@ -394,6 +413,14 @@ function registerIpc() {
     const page = t && t.state.meta && t.state.meta.page;
     if (page && /^https?:\/\//i.test(page)) { shell.openExternal(page); return true; }
     return false;
+  });
+  ipcMain.handle('dl:refresh', (_e, id) => {
+    const t = manager.get(id);
+    const page = t && t.state.meta && t.state.meta.page;
+    if (!t || t.state.status !== 'error' || !page || !/^https?:\/\//i.test(page)) { return false; }
+    refreshWanted.set(id, { page, kind: t.state.kind, at: Date.now() });
+    shell.openExternal(page); // the browser extension sees the page capture its media again and sends the new link by itself
+    return true;
   });
   ipcMain.handle('dl:copyLink', (_e, id) => { const t = manager.get(id); if (t) { clipboard.writeText(t.state.url); } return true; });
 

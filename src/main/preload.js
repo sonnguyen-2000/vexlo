@@ -18,6 +18,7 @@ contextBridge.exposeInMainWorld('vexlo', {
   showInFolder: call('dl:showInFolder'),
   copyLink: call('dl:copyLink'),
   openPage: call('dl:openPage'),
+  refreshLink: call('dl:refresh'),
   getSettings: call('settings:get'),
   setSettings: call('settings:set'),
   appInfo: call('app:info'),

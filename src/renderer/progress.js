@@ -39,6 +39,10 @@
     $('errTxt').textContent = T('Tải bị lỗi: {e}', { e: T(t.error || 'không rõ nguyên nhân') });
     if (!isErr) { closedForErr = false; }
     else if (onErr === 'close' && !closedForErr) { closedForErr = true; setTimeout(() => api.progressClose(), 600); }
+    const canRefresh = isErr && !!(t.meta && t.meta.page);
+    $('refresh').classList.toggle('hidden', !canRefresh);
+    document.querySelector('.foot .chk').classList.toggle('hidden', isErr); // the "close when finished" option is moot on an error: room for the buttons
+    $('errRefresh').classList.toggle('hidden', !canRefresh);
     const done = t.status === 'done';
     $('actDl').classList.toggle('hidden', done);
     $('actDone').classList.toggle('hidden', !done);
@@ -59,6 +63,13 @@
     api.on('settings:changed', (n) => { onErr = (n && n.progressOnError) || 'ask'; if (task) { render(task); } });
     $('errKeep').addEventListener('click', () => { onErr = 'keep'; api.setSettings({ progressOnError: 'keep' }); if (task) { render(task); } });
     $('errClose').addEventListener('click', () => { onErr = 'close'; api.setSettings({ progressOnError: 'close' }); api.progressClose(); });
+    const doRefresh = async () => {
+      if (!task) { return; }
+      const ok = await api.refreshLink(task.id).catch(() => false);
+      $('refMsg').textContent = ok ? T('Đã mở trang gốc. Hãy phát video, Vexlo sẽ tự lấy link mới.') : T('Không có địa chỉ trang gốc');
+    };
+    $('refresh').addEventListener('click', doRefresh);
+    $('errRefresh').addEventListener('click', doRefresh);
     $('auto').addEventListener('change', () => { api.setSettings({ progressAutoClose: $('auto').checked }); });
     const t = await api.progressGet().catch(() => null);
     if (!t) { api.progressClose(); return; }
