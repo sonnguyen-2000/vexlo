@@ -410,6 +410,7 @@ browser.runtime.onMessage.addListener((msg, sender) => {
   switch (msg.type) {
     case 'getSettings': return Promise.resolve({ floating: settings.floating && settings.enabled });
     case 'status': return appStatus(true);
+    case 'mediaCount': return (globalThis.SGReady || Promise.resolve()).then(() => tabMedia.get(tabId)?.size || 0); // how many items THIS tab has captured
     case 'getMedia': return (globalThis.SGReady || Promise.resolve()).then(() => listFor(tabId));
     case 'send':
       return sendMediaItem(tabId, msg.id).then(() => ({ ok: true }), (e) => ({ ok: false, error: e.message, code: e.code || '' }));

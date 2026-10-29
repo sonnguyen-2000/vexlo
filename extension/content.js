@@ -168,6 +168,21 @@
     closePanel();
   }
 
+  // The button only appears when there is really something to download: the tab has captured media (stream or file),
+  // or the <video> points at a plain http(s) file. A freshly opened page, or a player that has not started loading yet, shows nothing.
+  let mediaCount = 0;
+  let countAt = 0;
+  let countBusy = false;
+  function refreshCount(done) {
+    if (countBusy || Date.now() - countAt < 1200) { return; }
+    countBusy = true;
+    api.runtime.sendMessage({ type: 'mediaCount' })
+      .then((n) => { mediaCount = Number(n) || 0; }, () => { mediaCount = 0; })
+      .finally(() => { countBusy = false; countAt = Date.now(); if (done) { done(); } });
+  }
+  const hasDirectSrc = (v) => /^https?:/i.test(v.currentSrc || v.src || '');
+  const canDownload = (v) => mediaCount > 0 || hasDirectSrc(v);
+
   function videoAt(x, y) {
     for (const el of document.elementsFromPoint(x, y)) {
       if (el.tagName === 'VIDEO') {
@@ -179,14 +194,19 @@
   }
 
   let last = 0;
+  let lastX = 0;
+  let lastY = 0;
   document.addEventListener('mousemove', (e) => {
     if (!enabled) { return; }
+    lastX = e.clientX; lastY = e.clientY;
     const now = Date.now();
     if (now - last < 100) { return; }
     last = now;
     if (host && e.target === host) { clearTimeout(hideTimer); return; }
     const v = videoAt(e.clientX, e.clientY);
     if (v) {
+      refreshCount(() => { if (v === current || !current) { const again = videoAt(lastX, lastY); if (again && canDownload(again)) { clearTimeout(hideTimer); placeButton(again); if (!panelOpen) { hideTimer = setTimeout(hideButton, 3500); } } } });
+      if (!canDownload(v)) { if (current && !panelOpen) { hideButton(); } return; }
       clearTimeout(hideTimer);
       placeButton(v);
       if (!panelOpen) { hideTimer = setTimeout(hideButton, 3500); }
