@@ -1,0 +1,16 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Ship release (test, bump, commit, push, tag)",
+      "type": "shell",
+      "command": "node tools/release.js ${input:bump} \"${input:message}\"",
+      "problemMatcher": [],
+      "presentation": { "reveal": "always", "panel": "dedicated", "focus": true }
+    }
+  ],
+  "inputs": [
+    { "id": "bump", "type": "pickString", "description": "Version bump", "options": ["patch", "minor", "major"], "default": "patch" },
+    { "id": "message", "type": "promptString", "description": "Commit message" }
+  ]
+}

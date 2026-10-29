@@ -38,7 +38,7 @@
 ; ---- Installer option: "Start Vexlo when Windows starts", a checkbox page right after the folder page.
 ; The answer (1 = yes, 0 = no) is left as a flag file; the app turns it into its "Start with Windows" setting on first run.
 ; The page is skipped on updates and silent installs.
-!ifndef BUILD_UNINSTALLER
+!ifndef UNINSTALLER_OUT_FILE
   !include nsDialogs.nsh
   !include LogicLib.nsh
 
