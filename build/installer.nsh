@@ -35,17 +35,50 @@
   ${endIf}
 !macroend
 
-; Asks once, on a fresh interactive install only (not on updates or silent installs): start Vexlo with Windows?
-; The answer is left as a flag file; the app turns it into its "Start with Windows" setting on first run.
-!macro customInstall
-  ${ifNot} ${isUpdated}
-  ${ifNot} ${Silent}
-    MessageBox MB_YESNO|MB_ICONQUESTION "Start Vexlo automatically when Windows starts?$\r$\n(It runs quietly in the tray. You can change this later in Settings.)" IDNO vexlo_no_autostart
+; ---- Installer option: "Start Vexlo when Windows starts", a checkbox page right after the folder page.
+; The answer (1 = yes, 0 = no) is left as a flag file; the app turns it into its "Start with Windows" setting on first run.
+; The page is skipped on updates and silent installs.
+!ifndef BUILD_UNINSTALLER
+  !include nsDialogs.nsh
+  !include LogicLib.nsh
+
+  Var VexloAutoBox
+  Var VexloAutoState
+
+  Function VexloOptionsPage
+    ${if} ${isUpdated}
+      Abort
+    ${endIf}
+    !insertmacro MUI_HEADER_TEXT "Startup" "Choose how Vexlo starts on this PC."
+    nsDialogs::Create 1018
+    Pop $0
+    ${NSD_CreateCheckbox} 0 8u 100% 12u "Start Vexlo when Windows starts"
+    Pop $VexloAutoBox
+    ${NSD_CreateLabel} 12u 24u 95% 24u "Vexlo runs quietly in the system tray so it can catch downloads from your browser. You can change this later in Settings."
+    Pop $0
+    nsDialogs::Show
+  FunctionEnd
+
+  Function VexloOptionsLeave
+    ${NSD_GetState} $VexloAutoBox $VexloAutoState
+  FunctionEnd
+
+  !macro customPageAfterChangeDir
+    Page custom VexloOptionsPage VexloOptionsLeave
+  !macroend
+
+  !macro customInstall
+    ${ifNot} ${isUpdated}
+    ${ifNot} ${Silent}
       CreateDirectory "$APPDATA\Vexlo"
       FileOpen $0 "$APPDATA\Vexlo\autostart.flag" w
-      FileWrite $0 "1"
+      ${if} $VexloAutoState == ${BST_CHECKED}
+        FileWrite $0 "1"
+      ${else}
+        FileWrite $0 "0"
+      ${endIf}
       FileClose $0
-    vexlo_no_autostart:
-  ${endIf}
-  ${endIf}
-!macroend
+    ${endIf}
+    ${endIf}
+  !macroend
+!endif

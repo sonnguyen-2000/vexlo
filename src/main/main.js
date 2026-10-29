@@ -77,7 +77,8 @@ function applyInstallerOptions() {
   const flag = path.join(app.getPath('userData'), 'autostart.flag');
   try {
     if (fs.existsSync(flag)) {
-      settings = clampSettings({ ...settings, startWithOS: true });
+      const yes = fs.readFileSync(flag, 'utf8').trim() === '1';
+      settings = clampSettings({ ...settings, startWithOS: yes });
       saveSettings();
       fs.unlinkSync(flag);
     }
