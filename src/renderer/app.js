@@ -492,7 +492,11 @@
     $('bUpd').disabled = u.state === 'checking';
     $('bUpd').dataset.ready = u.state === 'ready' ? '1' : '';
   };
-  bridge.appInfo().then((i) => { ver = i.version; }).catch(() => {});
+  bridge.appInfo().then((i) => {
+    ver = i.version;
+    if (i.justUpdated) { toast(T('Vexlo đã được cập nhật lên bản {v}.', { v: i.justUpdated.to })); }
+  }).catch(() => {});
+  bridge.on('update:restarting', (u) => toast(T('Đang cập nhật lên bản {v}. Vexlo sẽ tự khởi động lại sau vài giây.', { v: u && u.version })));
   bridge.on('update:status', showUpd);
   $('bUpd').addEventListener('click', async () => {
     if ($('bUpd').dataset.ready) { bridge.updateInstall(); return; }

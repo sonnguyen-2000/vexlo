@@ -328,7 +328,7 @@ function createTray() {
 function appInfo() {
   return {
     version: VERSION, port: settings.port, token: settings.token, apiOk: !!api && !apiError, apiError, extensionDir: EXT_DIR,
-    platform: process.platform, defaultDir: settings.downloadDir,
+    platform: process.platform, defaultDir: settings.downloadDir, justUpdated,
   };
 }
 
@@ -397,7 +397,7 @@ function registerIpc() {
   ipcMain.handle('app:info', () => appInfo());
   ipcMain.handle('update:check', () => checkUpdateNow());
   ipcMain.handle('update:status', () => updStatus);
-  ipcMain.handle('update:install', () => { if (updater && updStatus.state === 'ready') { quitting = true; updater.quitAndInstall(false, true); } return true; });
+  ipcMain.handle('update:install', () => { if (updater && updStatus.state === 'ready') { applyUpdateNow(); } return true; });
   ipcMain.handle('app:openExtensionFolder', () => shell.openPath(EXT_DIR));
   ipcMain.handle('dialog:chooseFolder', async (e, defaultPath) => {
     const win = BrowserWindow.fromWebContents(e.sender);
@@ -585,10 +585,62 @@ function getUpdater() {
   autoUpdater.on('update-available', (i) => { log('update available: ' + i.version); setUpd({ state: 'downloading', version: i.version }); });
   autoUpdater.on('update-not-available', (i) => { log('no update (latest ' + i.version + ')'); setUpd({ state: 'latest', version: i.version }); });
   autoUpdater.on('download-progress', (p) => { setUpd({ state: 'downloading', message: String(Math.round(p.percent)) }); });
-  autoUpdater.on('update-downloaded', (i) => { log('downloaded ' + i.version + ', installs when the app quits'); setUpd({ state: 'ready', version: i.version }); });
+  autoUpdater.autoInstallOnAppQuit = false; // the app lives in the tray and never "quits" by itself: we install on our own below
+  autoUpdater.on('update-downloaded', (i) => {
+    log('downloaded ' + i.version);
+    setUpd({ state: 'ready', version: i.version });
+    if (settings.autoUpdate) { installWhenIdle(); }
+  });
   autoUpdater.on('error', (e) => { const m = String(e && e.message || e).split('\n')[0]; log('ERROR: ' + m); setUpd({ state: 'error', message: m }); });
   updater = autoUpdater;
   return updater;
+}
+
+const UPDATED_FILE = () => path.join(app.getPath('userData'), 'updated.json');
+let installTimer = null;
+let installing = false;
+
+/** Waits until nothing is downloading (a restart would interrupt it), then installs. Checks every 15 s. */
+function installWhenIdle() {
+  if (installTimer || installing) { return; }
+  const tick = () => {
+    const busy = manager && manager.list().some((t) => t.status === 'downloading' || t.status === 'queued');
+    if (busy) { return; }
+    clearInterval(installTimer);
+    installTimer = null;
+    applyUpdateNow();
+  };
+  installTimer = setInterval(tick, 15000);
+  tick();
+}
+
+/** Tells the user why the app is about to restart, stops the engine cleanly, then runs the installer silently. */
+async function applyUpdateNow() {
+  if (installing || !updater || updStatus.state !== 'ready') { return; }
+  installing = true;
+  const v = updStatus.version;
+  try { fs.writeFileSync(UPDATED_FILE(), JSON.stringify({ from: VERSION, to: v })); } catch { /* ignore */ }
+  broadcast('update:restarting', { version: v });
+  if (Notification.isSupported()) {
+    new Notification({ title: T('Vexlo đang cập nhật'), body: T('Đang cập nhật lên bản {v}. Vexlo sẽ tự khởi động lại sau vài giây.', { v }), silent: true }).show();
+  }
+  await new Promise((ok) => setTimeout(ok, 4000)); // time to read the message
+  try {
+    if (manager) { const m = manager; await m.shutdown(); manager = null; }
+    if (api) { await api.close().catch(() => {}); api = null; }
+  } catch { /* going down anyway */ }
+  quitting = true;
+  updater.quitAndInstall(true, true); // silent installer (no wizard), start Vexlo again afterwards
+}
+
+/** After a restart caused by an update: remember it once so the window can say "updated to x". */
+let justUpdated = null;
+function readJustUpdated() {
+  try {
+    const j = JSON.parse(fs.readFileSync(UPDATED_FILE(), 'utf8'));
+    fs.unlinkSync(UPDATED_FILE());
+    if (j && j.to === VERSION) { justUpdated = j; }
+  } catch { /* no update happened */ }
 }
 
 /** Manual "check for updates": resolves with the final state (latest / downloading / ready / error / dev). */
@@ -606,8 +658,9 @@ function startAutoUpdate() {
   if (!app.isPackaged || !settings.autoUpdate) { return; }
   try {
     const u = getUpdater();
-    u.checkForUpdatesAndNotify().catch(() => {});
-    setInterval(() => { if (settings.autoUpdate) { u.checkForUpdatesAndNotify().catch(() => {}); } }, 6 * 3600 * 1000);
+    const check = () => { if (settings.autoUpdate) { u.checkForUpdates().catch(() => {}); } };
+    setTimeout(check, 20000);
+    setInterval(check, 4 * 3600 * 1000);
   } catch { /* electron-updater not installed */ }
 }
 
@@ -620,6 +673,7 @@ function main() {
   app.whenReady().then(async () => {
     migrateOldData();
     loadSettings();
+    readJustUpdated();
     applyInstallerOptions();
     fs.mkdirSync(settings.downloadDir, { recursive: true });
     manager = new EngineClient({

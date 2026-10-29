@@ -88,6 +88,8 @@
     'Bạn đang dùng bản mới nhất ({v})': 'You are on the latest version ({v})', 'Đang tải bản {v}…': 'Downloading version {v}…',
     'Đã tải bản {v}. Bấm để khởi động lại và cập nhật.': 'Version {v} is ready. Click to restart and update.', 'Khởi động lại để cập nhật': 'Restart to update',
     'Không kiểm tra được: {e}': 'Could not check: {e}', 'Bản chạy từ mã nguồn không tự cập nhật.': 'A build run from source does not update itself.',
+    'Vexlo đang cập nhật': 'Vexlo is updating', 'Đang cập nhật lên bản {v}. Vexlo sẽ tự khởi động lại sau vài giây.': 'Updating to version {v}. Vexlo will restart by itself in a few seconds.',
+    'Vexlo đã được cập nhật lên bản {v}.': 'Vexlo has been updated to version {v}.',
     // ---- progress window
     'Đã tải': 'Downloaded', 'Tải bị lỗi.': 'Download failed.', 'Lần sau khi tải lỗi:': 'Next time a download fails:', 'Giữ cửa sổ': 'Keep window', 'Tự đóng khi xong': 'Close when finished',
     'Hủy tải': 'Cancel download', 'Ẩn': 'Hide', 'Mở thư mục': 'Open folder', 'Đã tải xong': 'Download complete', 'Tất cả tệp đã tải xong.': 'All files have finished downloading.', 'Thực hiện ngay': 'Do it now',
