@@ -1,0 +1,15 @@
+body{overflow:hidden}
+.up{display:flex;flex-direction:column;gap:9px;padding:16px 18px 12px;min-height:100vh;background:var(--bg)}
+.line{display:flex;justify-content:space-between;align-items:baseline;gap:10px}
+.line b{font-size:14px}
+#pct{color:var(--mut);font-variant-numeric:tabular-nums}
+.bar{position:relative;height:8px;border-radius:4px;background:var(--bar);overflow:hidden}
+.bar i{position:absolute;inset:0 auto 0 0;width:0;border-radius:4px;background:linear-gradient(90deg,#18c2d6,#2fd29a);transition:width .25s ease}
+.bar.busy i{width:35%;animation:slide 1.2s ease-in-out infinite}
+@keyframes slide{0%{left:-35%}100%{left:100%}}
+@media (prefers-reduced-motion:reduce){.bar.busy i{animation:none;width:100%;opacity:.5}}
+.msg{color:var(--mut);line-height:1.4;min-height:2.8em}
+.actions{display:flex;justify-content:flex-end;margin-top:auto}
+.btn{display:inline-flex;align-items:center;justify-content:center;height:28px;padding:0 14px;border:1px solid var(--line);border-radius:8px;background:transparent;color:var(--fg);cursor:pointer}
+.btn:hover{background:var(--hover)}
+.hidden{display:none!important}

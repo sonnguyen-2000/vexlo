@@ -90,6 +90,10 @@
     'Không kiểm tra được: {e}': 'Could not check: {e}', 'Bản chạy từ mã nguồn không tự cập nhật.': 'A build run from source does not update itself.',
     'Vexlo đang cập nhật': 'Vexlo is updating', 'Đang cập nhật lên bản {v}. Vexlo sẽ tự khởi động lại sau vài giây.': 'Updating to version {v}. Vexlo will restart by itself in a few seconds.',
     'Vexlo đã được cập nhật lên bản {v}.': 'Vexlo has been updated to version {v}.',
+    'Cập nhật Vexlo': 'Vexlo update', 'Đang tải bản cập nhật {v}': 'Downloading update {v}', 'Bạn vẫn dùng Vexlo bình thường trong lúc tải.': 'You can keep using Vexlo while it downloads.',
+    'Đã tải xong bản {v}': 'Version {v} downloaded', 'Vexlo sẽ cài và khởi động lại khi các tệp đang tải xong.': 'Vexlo will install it and restart when your current downloads finish.',
+    'Đang cài bản {v}': 'Installing version {v}', 'Vexlo sẽ tự đóng rồi mở lại sau khoảng một phút. Đây là bình thường, bạn không cần làm gì.': 'Vexlo will close and reopen by itself in about a minute. This is normal, you do not need to do anything.',
+    'Đang cài bản {v}. Vexlo sẽ tự mở lại sau khoảng một phút, bạn không cần làm gì.': 'Installing version {v}. Vexlo will reopen by itself in about a minute, you do not need to do anything.',
     // ---- progress window
     'Đã tải': 'Downloaded', 'Tải bị lỗi.': 'Download failed.', 'Lần sau khi tải lỗi:': 'Next time a download fails:', 'Giữ cửa sổ': 'Keep window', 'Tự đóng khi xong': 'Close when finished',
     'Hủy tải': 'Cancel download', 'Ẩn': 'Hide', 'Mở thư mục': 'Open folder', 'Đã tải xong': 'Download complete', 'Tất cả tệp đã tải xong.': 'All files have finished downloading.', 'Thực hiện ngay': 'Do it now',

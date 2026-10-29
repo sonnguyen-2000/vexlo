@@ -3,7 +3,7 @@ const path = require('path');
 const fs = require('fs');
 const crypto = require('crypto');
 const {
-  app, BrowserWindow, Tray, Menu, ipcMain, dialog, shell, clipboard, Notification, nativeImage, nativeTheme,
+  app, BrowserWindow, Tray, Menu, ipcMain, dialog, shell, clipboard, Notification, nativeImage, nativeTheme, screen,
 } = require('electron');
 const { detectKind } = require('../core/manager');
 const { EngineClient } = require('../core/engine-client');
@@ -570,17 +570,43 @@ function migrateOldData() {
 /** Updates come from the GitHub release of this project (see docs/PUBLISHING.md). Never fatal: no updater, no network, dev run. */
 // ------------------------------------------------------------------ updates
 
+function updLog(m) {
+  try { fs.appendFileSync(path.join(app.getPath('userData'), 'update.log'), `${new Date().toISOString()} ${m}\n`); } catch { /* ignore */ }
+}
+
+// Small window that shows the update progress (download, waiting, installing).
+let updWin = null;
+function openUpdateWin() {
+  if (updWin && !updWin.isDestroyed()) { return; }
+  const wa = screen.getPrimaryDisplay().workArea;
+  const w = 380; const h = 150;
+  updWin = new BrowserWindow(baseOptions({
+    width: w, height: h, x: wa.x + wa.width - w - 16, y: wa.y + wa.height - h - 16, useContentSize: true, resizable: false,
+    minimizable: false, maximizable: false, alwaysOnTop: true, skipTaskbar: true, title: T('Cập nhật Vexlo'),
+  }));
+  updWin.setMenu(null);
+  secureWindow(updWin);
+  updWin.loadFile(path.join(RENDERER, 'update.html'), pageOpts()).catch(() => {});
+  updWin.once('ready-to-show', () => { if (updWin && !updWin.isDestroyed()) { updWin.showInactive(); } });
+  updWin.on('closed', () => { updWin = null; });
+}
+function closeUpdateWin() { if (updWin && !updWin.isDestroyed()) { updWin.close(); } }
+
 let updater = null;
 let updStatus = { state: 'idle', version: '', message: '' }; // idle | checking | available | downloading | ready | latest | error | dev
-function setUpd(patch) { updStatus = { ...updStatus, ...patch }; broadcast('update:status', updStatus); }
+function setUpd(patch) {
+  updStatus = { ...updStatus, ...patch };
+  broadcast('update:status', updStatus);
+  if (updStatus.state === 'downloading') { openUpdateWin(); }
+  else if (['latest', 'error', 'idle', 'checking', 'dev'].includes(updStatus.state)) { closeUpdateWin(); }
+}
 
 function getUpdater() {
   if (updater) { return updater; }
   const { autoUpdater } = require('electron-updater');
   // Everything the updater does is written to update.log (next to settings.json) so a failed update can be diagnosed.
-  const logFile = path.join(app.getPath('userData'), 'update.log');
-  const log = (m) => { try { fs.appendFileSync(logFile, `${new Date().toISOString()} ${m}\n`); } catch { /* ignore */ } };
-  log(`running ${VERSION}`);
+  updLog(`running ${VERSION}`);
+  const log = updLog;
   autoUpdater.on('checking-for-update', () => { log('checking'); setUpd({ state: 'checking', message: '' }); });
   autoUpdater.on('update-available', (i) => { log('update available: ' + i.version); setUpd({ state: 'downloading', version: i.version }); });
   autoUpdater.on('update-not-available', (i) => { log('no update (latest ' + i.version + ')'); setUpd({ state: 'latest', version: i.version }); });
@@ -603,9 +629,10 @@ let installing = false;
 /** Waits until nothing is downloading (a restart would interrupt it), then installs. Checks every 15 s. */
 function installWhenIdle() {
   if (installTimer || installing) { return; }
+  let logged = false;
   const tick = () => {
     const busy = manager && manager.list().some((t) => t.status === 'downloading' || t.status === 'queued');
-    if (busy) { return; }
+    if (busy) { if (!logged) { updLog('waiting for active downloads to finish'); logged = true; } return; }
     clearInterval(installTimer);
     installTimer = null;
     applyUpdateNow();
@@ -614,11 +641,52 @@ function installWhenIdle() {
   tick();
 }
 
+/** The app window disappears while the silent installer works: a tiny separate window (PowerShell) keeps saying so
+ *  until the new Vexlo is running again, so nobody thinks the app crashed. Best effort: failures are ignored. */
+function showInstallSplash(version) {
+  if (process.platform !== 'win32') { return; }
+  try {
+    const ps1 = path.join(app.getPath('userData'), 'updating.ps1');
+    fs.writeFileSync(ps1, [
+      'param([string]$Title,[string]$Msg,[int]$OwnerPid,[string]$ProcName)',
+      'Add-Type -AssemblyName System.Windows.Forms',
+      'Add-Type -AssemblyName System.Drawing',
+      '$f = New-Object System.Windows.Forms.Form',
+      '$f.Text = $Title; $f.Size = New-Object System.Drawing.Size(400,130); $f.StartPosition = "CenterScreen"',
+      '$f.FormBorderStyle = "FixedDialog"; $f.ControlBox = $false; $f.TopMost = $true; $f.ShowInTaskbar = $false',
+      '$f.BackColor = [System.Drawing.Color]::FromArgb(27,30,34); $f.ForeColor = [System.Drawing.Color]::White',
+      '$l = New-Object System.Windows.Forms.Label; $l.Text = $Msg; $l.Location = New-Object System.Drawing.Point(16,14); $l.Size = New-Object System.Drawing.Size(360,44)',
+      '$f.Controls.Add($l)',
+      '$b = New-Object System.Windows.Forms.ProgressBar; $b.Style = "Marquee"; $b.MarqueeAnimationSpeed = 30; $b.Location = New-Object System.Drawing.Point(16,68); $b.Size = New-Object System.Drawing.Size(360,14)',
+      '$f.Controls.Add($b)',
+      '$t0 = Get-Date',
+      '$tm = New-Object System.Windows.Forms.Timer; $tm.Interval = 700',
+      '$tm.Add_Tick({',
+      '  $s = ((Get-Date) - $t0).TotalSeconds',
+      '  $old = Get-Process -Id $OwnerPid -ErrorAction SilentlyContinue',
+      '  $new = Get-Process -Name $ProcName -ErrorAction SilentlyContinue | Where-Object { $_.Id -ne $OwnerPid }',
+      '  if (($s -gt 4 -and -not $old -and $new) -or $s -gt 240) { $tm.Stop(); $f.Close() }',
+      '})',
+      '$tm.Start()',
+      '[void]$f.ShowDialog()',
+    ].join('\r\n'), 'utf8');
+    const child = require('child_process').spawn('powershell.exe', [
+      '-NoProfile', '-ExecutionPolicy', 'Bypass', '-WindowStyle', 'Hidden', '-File', ps1,
+      '-Title', T('Cập nhật Vexlo'),
+      '-Msg', T('Đang cài bản {v}. Vexlo sẽ tự mở lại sau khoảng một phút, bạn không cần làm gì.', { v: version }),
+      '-OwnerPid', String(process.pid), '-ProcName', path.basename(process.execPath, '.exe'),
+    ], { detached: true, stdio: 'ignore', windowsHide: true });
+    child.unref();
+  } catch { /* no splash: the update still installs */ }
+}
+
 /** Tells the user why the app is about to restart, stops the engine cleanly, then runs the installer silently. */
 async function applyUpdateNow() {
   if (installing || !updater || updStatus.state !== 'ready') { return; }
   installing = true;
   const v = updStatus.version;
+  updLog('installing ' + v);
+  openUpdateWin();
   try { fs.writeFileSync(UPDATED_FILE(), JSON.stringify({ from: VERSION, to: v })); } catch { /* ignore */ }
   broadcast('update:restarting', { version: v });
   if (Notification.isSupported()) {
@@ -630,6 +698,8 @@ async function applyUpdateNow() {
     if (api) { await api.close().catch(() => {}); api = null; }
   } catch { /* going down anyway */ }
   quitting = true;
+  showInstallSplash(v);
+  updLog('quitAndInstall');
   updater.quitAndInstall(true, true); // silent installer (no wizard), start Vexlo again afterwards
 }
 
