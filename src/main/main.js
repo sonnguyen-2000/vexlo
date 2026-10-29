@@ -276,11 +276,13 @@ function openConfirm(id, { replaced = false } = {}) {
 }
 
 /** IDM-style small window that follows one download. Closing it only hides it; the download keeps going. */
-/** Pops the window above every other app for a few seconds so the new download is noticed, then lets other windows cover it. */
+/** Brings the window to the front ONCE, then it is a normal window: switching to another app covers it.
+ *  (Turning "always on top" on and straight off raises the window without keeping it above everything.) */
 function popOnTop(win) {
   if (!settings.progressFloat || win.isDestroyed()) { return; }
   win.setAlwaysOnTop(true, 'floating');
-  setTimeout(() => { if (!win.isDestroyed()) { win.setAlwaysOnTop(false); } }, 6000);
+  win.setAlwaysOnTop(false);
+  win.moveTop();
 }
 
 function openProgress(id) {
@@ -300,7 +302,7 @@ function openProgress(id) {
   win.loadFile(path.join(RENDERER, 'progress.html'), pageOpts()).catch(() => { if (!win.isDestroyed()) { win.close(); } });
   win.once('ready-to-show', () => {
     if (n) { const [x, y] = win.getPosition(); win.setPosition(x + n * 28, y + n * 28); }
-    // Pop-up on: shows above other apps for a few seconds without stealing keyboard focus. Off: a normal window, no pop.
+    // Pop-up on: raised to the front once, without stealing keyboard focus. Off: a normal window, no raise.
     popOnTop(win);
     win.showInactive();
   });
@@ -410,6 +412,32 @@ function registerIpc() {
   });
   ipcMain.handle('app:info', () => appInfo());
   ipcMain.handle('update:check', () => checkUpdateNow());
+  ipcMain.handle('app:releaseNotes', () => {
+    const pub = ((require('../../package.json').build || {}).publish || [])[0] || {};
+    if (!pub.owner || /^YOUR_/.test(pub.owner) || !pub.repo) { return false; }
+    shell.openExternal(`https://github.com/${pub.owner}/${pub.repo}/releases/tag/v${VERSION}`);
+    return true;
+  });
+  ipcMain.handle('app:exportLog', async (e) => {
+    // One plain-text file the user can attach to a bug report. No pairing code and no download links in it.
+    const lines = [];
+    const safe = { ...settings, token: settings.token ? '(set)' : '' };
+    lines.push(`Vexlo ${VERSION}`, `Electron ${process.versions.electron}, Chrome ${process.versions.chrome}, Node ${process.versions.node}`,
+      `${process.platform} ${process.arch} ${require('os').release()}, locale ${app.getLocale()}, packaged ${app.isPackaged}`,
+      `Browser connection: ${!!api && !apiError ? 'ready on port ' + settings.port : 'not ready ' + apiError}`, '', '== settings', JSON.stringify(safe, null, 2), '', '== downloads (status and error only)');
+    const counts = {};
+    for (const t of manager ? manager.list() : []) {
+      counts[t.status] = (counts[t.status] || 0) + 1;
+      if (t.status === 'error') { lines.push(`error: ${String(t.error || '').slice(0, 200)} (${t.kind})`); }
+    }
+    lines.push('count by status: ' + JSON.stringify(counts), '', '== update.log (last 200 lines)');
+    try { lines.push(...fs.readFileSync(path.join(app.getPath('userData'), 'update.log'), 'utf8').split('\n').slice(-200)); } catch { lines.push('(no update.log)'); }
+    const win = BrowserWindow.fromWebContents(e.sender);
+    const r = await dialog.showSaveDialog(win, { defaultPath: path.join(app.getPath('desktop'), `vexlo-log-${VERSION}.txt`), filters: [{ name: 'Text', extensions: ['txt'] }] });
+    if (r.canceled || !r.filePath) { return ''; }
+    fs.writeFileSync(r.filePath, lines.join('\n'), 'utf8');
+    return r.filePath;
+  });
   ipcMain.handle('update:status', () => updStatus);
   ipcMain.handle('update:install', () => { if (updater && updStatus.state === 'ready') { applyUpdateNow(); } return true; });
   ipcMain.handle('app:openExtensionFolder', () => shell.openPath(EXT_DIR));

@@ -566,6 +566,11 @@
   }).catch(() => {});
   bridge.on('update:restarting', (u) => toast(T('Đang cập nhật lên bản {v}. Vexlo sẽ tự khởi động lại sau vài giây.', { v: u && u.version })));
   bridge.on('update:status', showUpd);
+  $('bNotes').addEventListener('click', async () => { if (!(await bridge.releaseNotes())) { toast(T('Chưa có trang phát hành cho bản này.'), true); } });
+  $('bLog').addEventListener('click', async () => {
+    const f = await bridge.exportLog();
+    $('logMsg').textContent = f ? T('Đã lưu nhật ký: {f}', { f }) : '';
+  });
   $('bUpd').addEventListener('click', async () => {
     if ($('bUpd').dataset.ready) { bridge.updateInstall(); return; }
     showUpd({ state: 'checking' });

@@ -49,7 +49,7 @@
     'Hiện cửa sổ nhỏ theo dõi tiến độ khi bắt đầu tải': 'Show a small progress window when a download starts',
     'Giống IDM: tốc độ, thời gian còn lại, tạm dừng/hủy ngay trên cửa sổ đó': 'Like IDM: speed, time left, pause/cancel right in that window',
     'Cửa sổ tiến độ nổi lên trên các ứng dụng khác lúc bắt đầu tải': 'Progress window pops up above other apps when a download starts',
-    'Hiện nổi bật vài giây cho bạn biết, sau đó ứng dụng khác có thể che lên. Tắt để chạy âm thầm': 'Stays on top for a few seconds so you notice it, then other windows can cover it. Turn off to run quietly',
+    'Hiện lên phía trước một lần cho bạn biết, sau đó chuyển sang ứng dụng khác thì nó bị che. Tắt để chạy âm thầm': 'Comes to the front once so you notice it; switch to another app and it is covered. Turn off to run quietly',
     'Khi tải bị lỗi, cửa sổ tiến độ': 'When a download fails, the progress window', 'Hỏi tôi một lần': 'Ask me once', 'Giữ lại hiển thị lỗi': 'Stays and shows the error', 'Tự đóng': 'Closes itself',
     'Thông báo khi tải xong': 'Notify when a download finishes', 'Đóng cửa sổ thì thu nhỏ xuống khay hệ thống': 'Closing the window minimizes to the system tray',
     'Để Vexlo tiếp tục bắt link từ trình duyệt': 'Lets Vexlo keep capturing links from the browser', 'Tự kiểm tra bản cập nhật mới': 'Check for updates automatically',
@@ -94,6 +94,8 @@
     'Đã tải xong bản {v}': 'Version {v} downloaded', 'Vexlo sẽ cài và khởi động lại khi các tệp đang tải xong.': 'Vexlo will install it and restart when your current downloads finish.',
     'Đang cài bản {v}': 'Installing version {v}', 'Vexlo sẽ tự đóng rồi mở lại sau khoảng một phút. Đây là bình thường, bạn không cần làm gì.': 'Vexlo will close and reopen by itself in about a minute. This is normal, you do not need to do anything.',
     'Đang cài bản {v}. Vexlo sẽ tự mở lại sau khoảng một phút, bạn không cần làm gì.': 'Installing version {v}. Vexlo will reopen by itself in about a minute, you do not need to do anything.',
+    'Xem điểm mới của bản này': 'See what is new in this version', 'Xuất nhật ký lỗi': 'Export error log',
+    'Chưa có trang phát hành cho bản này.': 'There is no release page for this version yet.', 'Đã lưu nhật ký: {f}': 'Log saved: {f}',
     // ---- progress window
     'Đã tải': 'Downloaded', 'Tải bị lỗi.': 'Download failed.', 'Lần sau khi tải lỗi:': 'Next time a download fails:', 'Giữ cửa sổ': 'Keep window', 'Tự đóng khi xong': 'Close when finished',
     'Hủy tải': 'Cancel download', 'Ẩn': 'Hide', 'Mở thư mục': 'Open folder', 'Đã tải xong': 'Download complete', 'Tất cả tệp đã tải xong.': 'All files have finished downloading.', 'Thực hiện ngay': 'Do it now',
