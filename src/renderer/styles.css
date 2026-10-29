@@ -116,11 +116,13 @@ kbd{padding:1px 6px;border:1px solid var(--line);border-bottom-width:2px;border-
 .field input[type=text],.field input[type=number],.field textarea,.field select{width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:var(--panel2);color:var(--fg);font:inherit;outline:0}
 .field input:focus,.field textarea:focus,.field select:focus{border-color:var(--acc);box-shadow:0 0 0 3px rgba(15,157,138,.18)}
 .field textarea{min-height:96px;resize:vertical;font-family:Consolas,'Cascadia Mono',monospace;font-size:12.5px}
-.field .row{display:flex;gap:8px}
+.field .row{display:flex;flex-wrap:wrap;align-items:center;gap:8px}
+.field .row+.row{margin-top:8px}
+.field:has(#bUpd){margin:14px 0 10px}
 .field .hint{margin-top:4px;color:var(--mut);font-size:12px}
 .grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
 .chk{display:flex;align-items:center;gap:9px;padding:7px 0;cursor:pointer}
-.chk input{width:16px;height:16px;accent-color:var(--acc)}
+.chk input{flex:none;width:16px;height:16px;accent-color:var(--acc)} /* flex:none keeps every checkbox the same size when its text wraps */
 .chk small{display:block;color:var(--mut)}
 
 /* ---------- modal ---------- */
