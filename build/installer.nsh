@@ -38,6 +38,7 @@
 ; ---- Installer option: "Start Vexlo when Windows starts", a checkbox page right after the folder page.
 ; The answer (1 = yes, 0 = no) is left as a flag file; the app turns it into its "Start with Windows" setting on first run.
 ; Updates run the installer silently (/S), and silent installs never show pages, so this page only appears for a person installing.
+!ifndef BUILD_UNINSTALLER
   !include nsDialogs.nsh
   !include LogicLib.nsh
 
@@ -45,7 +46,11 @@
   Var VexloAutoState
 
   Function VexloOptionsPage
-    !insertmacro MUI_HEADER_TEXT "Startup" "Choose how Vexlo starts on this PC."
+    ; header texts of the wizard window (what MUI_HEADER_TEXT does; that macro is not loaded yet when this file is read)
+    GetDlgItem $0 $HWNDPARENT 1037
+    SendMessage $0 ${WM_SETTEXT} 0 "STR:Startup"
+    GetDlgItem $0 $HWNDPARENT 1038
+    SendMessage $0 ${WM_SETTEXT} 0 "STR:Choose how Vexlo starts on this PC."
     nsDialogs::Create 1018
     Pop $0
     ${NSD_CreateCheckbox} 0 8u 100% 12u "Start Vexlo when Windows starts"
@@ -77,4 +82,4 @@
     ${endIf}
     ${endIf}
   !macroend
-
+!endif
