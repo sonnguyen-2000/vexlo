@@ -14,7 +14,7 @@
   let busy = false;
 
   const BAD_CHARS = /[\\/:*?"<>|\u0000-\u001f]/g;
-  const cleanName = (s) => String(s || '').replace(BAD_CHARS, '_').replace(/\s+/g, ' ').trim();
+  const cleanName = (s) => String(s || '').replace(/\uFFFD/g, '').replace(BAD_CHARS, '_').replace(/\s+/g, ' ').trim();
 
   function setSelect(sel, value, fallback) {
     const v = String(value);
@@ -57,7 +57,7 @@
   function render(t) {
     const isStream = t.kind === 'hls' || t.kind === 'dash';
     $('url').value = t.url || '';
-    if (!nameEdited) { $('name').value = t.filename || ''; }
+    if (!nameEdited) { $('name').value = String(t.filename || '').replace(/\uFFFD/g, ''); }
     const shownName = $('name').value || t.filename || t.url || '';
     const cat = SG.categoryOf(shownName, t.kind);
     $('badge').dataset.cat = cat;
@@ -176,7 +176,10 @@
     render(task);
     reportSize();
     $('name').focus();
-    $('name').select();
+    // select the name without its extension and show the start of it (not the tail)
+    const nm = $('name'); const dot = nm.value.lastIndexOf('.');
+    nm.setSelectionRange(0, dot > 0 ? dot : nm.value.length);
+    nm.scrollLeft = 0;
   }
 
   init();

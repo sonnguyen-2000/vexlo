@@ -606,31 +606,11 @@ function updLog(m) {
   try { fs.appendFileSync(path.join(app.getPath('userData'), 'update.log'), `${new Date().toISOString()} ${m}\n`); } catch { /* ignore */ }
 }
 
-// Small window that shows the update progress (download, waiting, installing).
-let updWin = null;
-function openUpdateWin() {
-  if (updWin && !updWin.isDestroyed()) { return; }
-  const wa = screen.getPrimaryDisplay().workArea;
-  const w = 380; const h = 150;
-  updWin = new BrowserWindow(baseOptions({
-    width: w, height: h, x: wa.x + wa.width - w - 16, y: wa.y + wa.height - h - 16, useContentSize: true, resizable: false,
-    minimizable: false, maximizable: false, alwaysOnTop: true, skipTaskbar: true, title: T('Cập nhật Vexlo'),
-  }));
-  updWin.setMenu(null);
-  secureWindow(updWin);
-  updWin.loadFile(path.join(RENDERER, 'update.html'), pageOpts()).catch(() => {});
-  updWin.once('ready-to-show', () => { if (updWin && !updWin.isDestroyed()) { updWin.showInactive(); } });
-  updWin.on('closed', () => { updWin = null; });
-}
-function closeUpdateWin() { if (updWin && !updWin.isDestroyed()) { updWin.close(); } }
-
 let updater = null;
 let updStatus = { state: 'idle', version: '', message: '' }; // idle | checking | available | downloading | ready | latest | error | dev
 function setUpd(patch) {
   updStatus = { ...updStatus, ...patch };
   broadcast('update:status', updStatus);
-  if (updStatus.state === 'downloading') { openUpdateWin(); }
-  else if (['latest', 'error', 'idle', 'checking', 'dev'].includes(updStatus.state)) { closeUpdateWin(); }
 }
 
 function getUpdater() {
@@ -707,7 +687,7 @@ function showInstallSplash(version) {
       '-Title', T('Cập nhật Vexlo'),
       '-Msg', T('Đang cài bản {v}. Vexlo sẽ tự mở lại sau khoảng một phút, bạn không cần làm gì.', { v: version }),
       '-OwnerPid', String(process.pid), '-ProcName', path.basename(process.execPath, '.exe'),
-    ], { detached: true, stdio: 'ignore', windowsHide: true });
+    ], { detached: true, stdio: 'ignore' }); // not windowsHide: that flag would hide the form as well; -WindowStyle Hidden hides the console
     child.unref();
   } catch { /* no splash: the update still installs */ }
 }
@@ -718,7 +698,6 @@ async function applyUpdateNow() {
   installing = true;
   const v = updStatus.version;
   updLog('installing ' + v);
-  openUpdateWin();
   try { fs.writeFileSync(UPDATED_FILE(), JSON.stringify({ from: VERSION, to: v })); } catch { /* ignore */ }
   broadcast('update:restarting', { version: v });
   if (Notification.isSupported()) {

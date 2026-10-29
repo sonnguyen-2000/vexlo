@@ -8,6 +8,7 @@ const WIN_RESERVED = /^(con|prn|aux|nul|com[1-9]|lpt[1-9])(\..*)?$/i;
 function sanitizeFilename(name, fallback = 'download') {
   let s = String(name ?? '')
     // eslint-disable-next-line no-control-regex
+    .replace(/\uFFFD/g, '') // broken-encoding placeholder that sometimes ends up in page titles
     .replace(/[\u0000-\u001f\\/:*?"<>|]/g, '_')
     .replace(/\s+/g, ' ')
     .trim()

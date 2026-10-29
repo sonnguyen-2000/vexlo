@@ -77,3 +77,12 @@ html,body{height:auto}
 .chk span{white-space:nowrap}
 .foot .btn svg.ic{display:none}
 .note.warn{color:var(--warn)}
+
+/* readable name field and a footer that never gets cut off (English labels are wider) */
+.inp.name:not(:focus){text-overflow:ellipsis}
+.inp.name::selection{background:rgba(15,157,138,.35);color:inherit}
+.foot{flex-wrap:wrap;row-gap:8px}
+.foot .chk{flex:1 1 auto;min-width:0}
+.foot .actions{flex:0 0 auto;margin-left:auto}
+.btn.primary{padding:0 14px}
+.btn{padding:0 11px}
