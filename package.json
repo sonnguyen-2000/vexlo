@@ -1,7 +1,7 @@
 {
   "name": "vexlo",
   "productName": "Vexlo",
-  "version": "0.1.5",
+  "version": "0.1.6",
   "description": "Vexlo - trình quản lý tải đa luồng kiểu IDM (Electron + Node.js)",
   "author": "YOUR_NAME",
   "homepage": "https://github.com/sonnguyen-2000/vexlo",
@@ -15,7 +15,8 @@
     "start": "electron .",
     "test": "node --test \"test/*.test.js\"",
     "dist": "node tools/make-edge.js && electron-builder --win nsis --publish never",
-    "release": "node tools/make-edge.js && electron-builder --win nsis --publish always"
+    "release": "node tools/make-edge.js && electron-builder --win nsis --publish always",
+    "ship": "node tools/release.js"
   },
   "devDependencies": {
     "electron": "^33.0.0",
