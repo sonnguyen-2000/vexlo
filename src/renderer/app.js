@@ -642,6 +642,10 @@
 
   bridge.on('dl:added', (t) => { items.set(t.id, t); schedule(); });
   bridge.on('dl:update', (t) => { items.set(t.id, t); schedule(); });
+  // The window was hidden/minimized and skipped updates: reload the whole list when it is shown again.
+  bridge.on('app:resync', async () => {
+    try { const all = await bridge.list(); items.clear(); for (const t of all) { items.set(t.id, t); } schedule(); } catch { /* next update will refresh */ }
+  });
   bridge.on('dl:removed', ({ id }) => { items.delete(id); selected.delete(id); schedule(); });
   bridge.on('settings:changed', (s) => { settings = s; schedule(); });
   bridge.on('app:status', (i) => { info = i; schedule(); });

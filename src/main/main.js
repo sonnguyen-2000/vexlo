@@ -3,7 +3,7 @@ const path = require('path');
 const fs = require('fs');
 const crypto = require('crypto');
 const {
-  app, BrowserWindow, Tray, Menu, ipcMain, dialog, shell, clipboard, Notification, nativeImage, nativeTheme, screen,
+  app, BrowserWindow, Tray, Menu, ipcMain, dialog, shell, clipboard, Notification, nativeImage, nativeTheme, screen, net,
 } = require('electron');
 const { detectKind } = require('../core/manager');
 const { EngineClient } = require('../core/engine-client');
@@ -221,10 +221,12 @@ function createMainWindow({ hidden = false } = {}) {
   secureWindow(mainWin);
   mainWin.loadFile(path.join(RENDERER, 'index.html'), pageOpts());
   mainWin.once('ready-to-show', () => { if (!hidden) { mainWin.show(); } });
-  mainWin.on('close', (e) => {
-    if (!quitting && settings.closeToTray && tray) { e.preventDefault(); mainWin.hide(); }
-  });
+  // Closing to the tray really closes the window (its page is freed from memory); showMain() builds it again on demand.
   mainWin.on('closed', () => { mainWin = null; });
+  // A hidden/minimized window skips live updates (see broadcast); when it comes back it asks the list again.
+  const resync = () => { if (mainWin && !mainWin.isDestroyed()) { mainWin.webContents.send('app:resync'); } };
+  mainWin.on('show', resync);
+  mainWin.on('restore', resync);
 }
 
 function showMain() {
@@ -299,7 +301,12 @@ function openProgress(id) {
 }
 
 function broadcast(channel, data) {
-  for (const w of BrowserWindow.getAllWindows()) { if (!w.isDestroyed()) { w.webContents.send(channel, data); } }
+  for (const w of BrowserWindow.getAllWindows()) {
+    if (w.isDestroyed()) { continue; }
+    // Nobody looks at a hidden or minimized main window: skip its progress traffic (it resyncs when shown again).
+    if (w === mainWin && (channel === 'dl:update' || channel === 'dl:added') && (!w.isVisible() || w.isMinimized())) { continue; }
+    w.webContents.send(channel, data);
+  }
 }
 
 function buildTrayMenu() {
@@ -524,6 +531,30 @@ function runAfterAction() {
   else if (action === 'sleep') { execFile('rundll32.exe', ['powrprof.dll,SetSuspendState', '0', '1', '0'], { windowsHide: true }, () => {}); }
 }
 
+// ---- automatic retry when the network drops (Wi-Fi off, server restarting): try again later instead of staying failed
+const retryState = new Map(); // id -> { n, timer }
+const TRANSIENT = /ENOTFOUND|ECONNRESET|ECONNREFUSED|ECONNABORTED|ETIMEDOUT|EAI_AGAIN|ENETUNREACH|ENETDOWN|EHOSTUNREACH|EPIPE|socket hang up|timeout|ngắt sớm|HTTP 5\d\d|HTTP 429|HTTP 408/i;
+const RETRY_DELAYS = [15, 30, 60, 120, 300, 300, 600, 600]; // seconds, then give up and leave the error visible
+
+function maybeAutoRetry(s) {
+  if (!manager || s.status !== 'error' || !TRANSIENT.test(String(s.error || ''))) { return; }
+  const st = retryState.get(s.id) || { n: 0, timer: null };
+  retryState.set(s.id, st);
+  if (st.timer || st.n >= RETRY_DELAYS.length) { return; }
+  const arm = (seconds) => {
+    st.timer = setTimeout(() => {
+      st.timer = null;
+      const t = manager && manager.get(s.id);
+      if (!t || !t.state || t.state.status !== 'error') { return; } // user paused/removed it or it recovered
+      if (!net.isOnline()) { arm(10); return; } // still offline: look again soon without using up an attempt
+      st.n++;
+      manager.resume(s.id);
+    }, seconds * 1000);
+  };
+  arm(RETRY_DELAYS[st.n]);
+}
+function forgetRetry(id) { const st = retryState.get(id); if (st && st.timer) { clearTimeout(st.timer); } retryState.delete(id); }
+
 function wireManager() {
   const throttle = new Map();
   manager.on('update', (s) => {
@@ -535,8 +566,9 @@ function wireManager() {
     if (s.status !== 'downloading') { checkAfterAll(); }
   });
   manager.on('added', (s) => { if (!s.pending) { broadcast('dl:added', s); } });
-  manager.on('removed', (s) => { throttle.delete(s.id); broadcast('dl:removed', s); checkAfterAll(); });
+  manager.on('removed', (s) => { throttle.delete(s.id); forgetRetry(s.id); broadcast('dl:removed', s); checkAfterAll(); });
   manager.on('done', (s) => {
+    forgetRetry(s.id);
     broadcast('dl:update', s);
     if (afterAll !== 'none') { afterArmed++; checkAfterAll(); }
     if (settings.notify && Notification.isSupported()) {
@@ -545,7 +577,7 @@ function wireManager() {
       n.show();
     }
   });
-  manager.on('error', (s) => { broadcast('dl:update', s); checkAfterAll(); });
+  manager.on('error', (s) => { broadcast('dl:update', s); maybeAutoRetry(s); checkAfterAll(); });
   manager.on('warn', () => {});
 }
 
@@ -776,7 +808,8 @@ function main() {
         .finally(() => app.exit(0));
     }
   });
-  app.on('window-all-closed', () => { if (process.platform !== 'darwin' && !tray) { app.quit(); } });
+  // With "close to tray" the app stays alive without windows; otherwise closing the last window quits.
+  app.on('window-all-closed', () => { if (process.platform !== 'darwin' && (!tray || !settings.closeToTray)) { app.quit(); } });
 }
 
 main();

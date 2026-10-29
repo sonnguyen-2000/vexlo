@@ -1,7 +1,7 @@
 'use strict';
 const { contextBridge, ipcRenderer } = require('electron');
 
-const EVENTS = new Set(['dl:update', 'dl:added', 'dl:removed', 'settings:changed', 'app:status', 'confirm:info', 'after:changed', 'update:status', 'update:restarting']);
+const EVENTS = new Set(['dl:update', 'dl:added', 'dl:removed', 'settings:changed', 'app:status', 'confirm:info', 'after:changed', 'update:status', 'update:restarting', 'app:resync']);
 const call = (ch) => (...args) => ipcRenderer.invoke(ch, ...args);
 
 // The renderer never gets Node or Electron objects, only this narrow, validated surface.
