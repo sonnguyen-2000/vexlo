@@ -1,13 +1,13 @@
 {
   "name": "vexlo",
   "productName": "Vexlo",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Vexlo - trình quản lý tải đa luồng kiểu IDM (Electron + Node.js)",
-  "author": "sonnguyen-2000",
-  "homepage": "https://github.com/YOUR_GITHUB_USERNAME/vexlo",
+  "author": "YOUR_NAME",
+  "homepage": "https://github.com/sonnguyen-2000/vexlo",
   "repository": {
     "type": "git",
-    "url": "https://github.com/YOUR_GITHUB_USERNAME/vexlo.git"
+    "url": "https://github.com/sonnguyen-2000/vexlo.git"
   },
   "main": "src/main/main.js",
   "license": "MIT",

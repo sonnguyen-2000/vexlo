@@ -123,6 +123,8 @@
     <div class="body">
       <div class="tabs"><button class="on" data-tab="general">Chung</button><button data-tab="download">Tải xuống</button><button data-tab="schedule">Lịch tải</button><button data-tab="browser">Trình duyệt</button></div>
       <div class="pane on" id="p-general">
+        <div class="field"><label for="sLang">Ngôn ngữ</label>
+          <select id="sLang"><option value="auto">Tự động (theo hệ thống)</option><option value="vi">Tiếng Việt</option><option value="en">English</option></select></div>
         <div class="field"><label>Thư mục tải mặc định</label><div class="row"><input id="sDir" type="text"><button class="btn sm" id="sBrowse">Chọn…</button></div></div>
         <label class="chk"><input type="checkbox" id="sCat"><span>Tự phân loại vào thư mục con<small>Video, Music, Compressed, Programs, Documents, Other</small></span></label>
         <label class="chk"><input type="checkbox" id="sConfirm"><span>Hiện hộp thoại xác nhận khi bắt được link từ trình duyệt<small>Giống IDM: cho phép đổi tên, thư mục, chất lượng trước khi tải</small></span></label>
@@ -130,6 +132,7 @@
           <select id="sDelete"><option value="ask">Luôn hỏi tôi (có thể chọn xóa luôn tệp)</option><option value="list">Chỉ xóa khỏi danh sách, giữ lại tệp</option><option value="files">Xóa cả tệp trên ổ đĩa</option></select>
           <div class="hint">Mục chưa tải xong thì chỉ xóa dữ liệu tải dở của chính nó.</div></div>
         <label class="chk"><input type="checkbox" id="sProg"><span>Hiện cửa sổ nhỏ theo dõi tiến độ khi bắt đầu tải<small>Giống IDM: tốc độ, thời gian còn lại, tạm dừng/hủy ngay trên cửa sổ đó</small></span></label>
+        <label class="chk"><input type="checkbox" id="sFloat"><span>Cửa sổ tiến độ nổi trên các ứng dụng khác<small>Tắt để chạy âm thầm: cửa sổ vẫn hiện nhưng không che ứng dụng bạn đang dùng</small></span></label>
         <div class="field"><label for="sOnErr">Khi tải bị lỗi, cửa sổ tiến độ</label>
           <select id="sOnErr"><option value="ask">Hỏi tôi một lần</option><option value="keep">Giữ lại hiển thị lỗi</option><option value="close">Tự đóng</option></select></div>
         <label class="chk"><input type="checkbox" id="sNotify"><span>Thông báo khi tải xong</span></label>
@@ -178,6 +181,7 @@
 <div class="toast" id="toast"></div>
 <div class="drop" id="drop">Thả link vào đây để tải</div>
 
+<script src="i18n.js"></script>
 <script src="common.js"></script>
 <script src="app.js"></script>
 </body>

@@ -80,11 +80,37 @@ async function pairWithApp(force = false) {
   return false;
 }
 
+/** Start the installed app through the native host (like IDM does), then wait for its local API to answer.
+ *  Harmless when the app is only busy: a second launch just hands over to the running instance. */
+let launching = null;
+function launchApp() {
+  if (!browser.runtime || typeof browser.runtime.sendNativeMessage !== 'function') { return Promise.resolve(false); }
+  if (launching) { return launching; }
+  launching = (async () => {
+    try {
+      const r = await browser.runtime.sendNativeMessage('dev.vexlo.host', { cmd: 'launch' });
+      if (!r || !r.ok) { return false; }
+      if (r.token && (r.token !== settings.token || r.port !== settings.port)) {
+        settings.token = r.token; settings.port = r.port;
+        await browser.storage.local.set({ token: r.token, port: r.port });
+      }
+      const until = Date.now() + 25000; // a cold start of the app can take a while
+      while (Date.now() < until) {
+        const p = await pingOnce(1500);
+        if (p.ok || p.reason === 'unauthorized') { return true; }
+        await new Promise((ok) => setTimeout(ok, 500));
+      }
+    } catch { /* host missing: fall back to "app not running" */ }
+    return false;
+  })().finally(() => { launching = null; });
+  return launching;
+}
+
 async function appStatus(force = false) {
   if (!force && Date.now() - aliveCache.at < 3000) { return aliveCache; }
-  // One retry with a longer timeout: the app can be busy for a moment (opening a window, just started) without being down.
   let r = await pingOnce(1500);
   if (!r.ok && await pairWithApp()) { r = await pingOnce(1500); } // new code from the app on this PC? try again
+  if (!r.ok && r.reason !== 'unauthorized' && await launchApp()) { r = await pingOnce(3500); } // not running: start it
   if (!r.ok) { r = await pingOnce(3500); }
   if (!r.ok) { r = await pingOnce(10000); } // a busy app can need several seconds: do not call it "not running" too early
   aliveCache = { at: Date.now(), ...r };
@@ -96,13 +122,16 @@ function appError(code, message) { return Object.assign(new Error(message || cod
 
 async function sendToApp(items, { show = false } = {}) {
   let res;
-  try {
-    res = await fetch(appUrl('/api/add'), {
-      method: 'POST',
-      headers: appHeaders({ 'content-type': 'application/json' }),
-      body: JSON.stringify({ items, show }),
-    });
-  } catch { throw appError('app-down', 'app-down'); }
+  const post = () => fetch(appUrl('/api/add'), {
+    method: 'POST',
+    headers: appHeaders({ 'content-type': 'application/json' }),
+    body: JSON.stringify({ items, show }),
+  });
+  try { res = await post(); } catch {
+    // Cannot connect: start the app (IDM-style) and try once more before giving up.
+    if (!(await launchApp())) { throw appError('app-down', 'app-down'); }
+    try { res = await post(); } catch { throw appError('app-down', 'app-down'); }
+  }
   if (res.status === 401 || res.status === 403) { throw appError('app-error', t('errToken')); }
   if (!res.ok) {
     let detail = '';

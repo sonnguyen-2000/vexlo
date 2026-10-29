@@ -7,6 +7,7 @@
   const $ = (id) => document.getElementById(id);
   const api = window.vexlo;
   const SG = window.SG;
+  const T = window.I18N.tr;
 
   let task = null;
   let nameEdited = false;
@@ -46,11 +47,11 @@
     const box = $('chips');
     box.textContent = '';
     const isStream = t.kind === 'hls' || t.kind === 'dash';
-    if (isStream) { box.appendChild(chip('Tải song song và ghép thành MP4', 'good', 'i-zap')); return; }
-    if (t.probing) { box.appendChild(chip('Đang kiểm tra liên kết…', 'busy')); return; }
-    if (t.probeError) { box.appendChild(chip('Chưa kiểm tra được liên kết', 'warn')); return; }
-    if (t.resumable) { box.appendChild(chip('Hỗ trợ tải tiếp, nhiều kết nối', 'good', 'i-zap')); }
-    else { box.appendChild(chip('Không hỗ trợ tải tiếp, dùng 1 kết nối', 'warn')); }
+    if (isStream) { box.appendChild(chip(T('Tải song song và ghép thành MP4'), 'good', 'i-zap')); return; }
+    if (t.probing) { box.appendChild(chip(T('Đang kiểm tra liên kết…'), 'busy')); return; }
+    if (t.probeError) { box.appendChild(chip(T('Chưa kiểm tra được liên kết'), 'warn')); return; }
+    if (t.resumable) { box.appendChild(chip(T('Hỗ trợ tải tiếp, nhiều kết nối'), 'good', 'i-zap')); }
+    else { box.appendChild(chip(T('Không hỗ trợ tải tiếp, dùng 1 kết nối'), 'warn')); }
   }
 
   function render(t) {
@@ -62,7 +63,7 @@
     $('badge').dataset.cat = cat;
     $('badgeUse').setAttribute('href', '#' + SG.GROUPS[cat].icon);
     // One quiet line under the name: what it is, how big, where from. The full address is in the tooltip.
-    const parts = [t.kind === 'hls' ? 'Luồng HLS' : t.kind === 'dash' ? 'Luồng DASH' : SG.GROUPS[cat].label];
+    const parts = [t.kind === 'hls' ? T('Luồng HLS') : t.kind === 'dash' ? T('Luồng DASH') : SG.GROUPS[cat].label];
     if (!isStream && t.size > 0) { parts.push(SG.fmtSize(t.size)); }
     if (SG.hostOf(t.url)) { parts.push(SG.hostOf(t.url)); }
     $('meta').textContent = parts.join('  ·  ');
@@ -74,7 +75,7 @@
     if (!busy && !$('conn').dataset.touched) { setSelect($('conn'), nearestConnections(t.connectionsMax), 8); }
     $('conn').disabled = !isStream && !t.probing && !t.resumable && !t.probeError;
     renderChips(t);
-    baseNote = t.probeError ? `${t.probeError}. Bạn vẫn có thể thử tải.` : (t.replaced ? 'Bản tải lỗi trước đó của tệp này sẽ được thay thế.' : '');
+    baseNote = t.probeError ? T('{e}. Bạn vẫn có thể thử tải.', { e: T(t.probeError) }) : (t.replaced ? T('Bản tải lỗi trước đó của tệp này sẽ được thay thế.') : '');
     baseNoteErr = !!t.probeError;
     showNote(dupText);
     scheduleDupCheck();
@@ -133,10 +134,10 @@
     $('dlg').textContent = '';
     const p = document.createElement('p');
     p.className = 'note err';
-    p.textContent = 'Không tìm thấy tác vụ tải này. Có thể nó đã bị hủy.';
+    p.textContent = T('Không tìm thấy tác vụ tải này. Có thể nó đã bị hủy.');
     const b = document.createElement('button');
     b.className = 'btn';
-    b.textContent = 'Đóng';
+    b.textContent = T('Đóng');
     b.addEventListener('click', () => window.close());
     $('dlg').append(p, b);
   }
@@ -151,7 +152,7 @@
   }
 
   async function init() {
-    if (!api) { document.body.textContent = 'Thiếu cầu nối với ứng dụng (preload).'; return; }
+    if (!api) { document.body.textContent = T('Thiếu cầu nối với ứng dụng (preload).'); return; }
     $('start').addEventListener('click', () => resolve('start'));
     $('later').addEventListener('click', () => resolve('later'));
     $('cancel').addEventListener('click', () => resolve('cancel'));

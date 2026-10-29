@@ -2,6 +2,7 @@
 (function () {
   const { GROUPS, categoryOf, fmtSize, fmtSpeed, fmtEta, fmtDate, hostOf, percent, statusText, FILTERS } = window.SG;
   const bridge = window.vexlo;
+  const T = window.I18N.tr;
   const $ = (id) => document.getElementById(id);
 
   const items = new Map();   // id -> task snapshot
@@ -15,19 +16,19 @@
   let dirty = false;
 
   const COLS = [
-    { key: 'filename', label: 'Tên tệp' },
-    { key: 'size', label: 'Dung lượng', num: true },
-    { key: 'progress', label: 'Tiến độ' },
-    { key: 'eta', label: 'Còn lại', num: true },
-    { key: 'speed', label: 'Tốc độ', num: true },
-    { key: 'createdAt', label: 'Thêm lúc' },
+    { key: 'filename', get label() { return T('Tên tệp'); } },
+    { key: 'size', get label() { return T('Dung lượng'); }, num: true },
+    { key: 'progress', get label() { return T('Tiến độ'); } },
+    { key: 'eta', get label() { return T('Còn lại'); }, num: true },
+    { key: 'speed', get label() { return T('Tốc độ'); }, num: true },
+    { key: 'createdAt', get label() { return T('Thêm lúc'); } },
   ];
 
   const NAV = [
-    { id: 'all', label: 'Tất cả', icon: 'i-inbox', filter: 'all' },
-    { id: 'active', label: 'Đang tải', icon: 'i-activity', filter: 'active' },
-    { id: 'unfinished', label: 'Chưa xong', icon: 'i-clock', filter: 'unfinished' },
-    { id: 'done', label: 'Đã xong', icon: 'i-checkc', filter: 'done' },
+    { id: 'all', get label() { return T('Tất cả'); }, icon: 'i-inbox', filter: 'all' },
+    { id: 'active', get label() { return T('Đang tải'); }, icon: 'i-activity', filter: 'active' },
+    { id: 'unfinished', get label() { return T('Chưa xong'); }, icon: 'i-clock', filter: 'unfinished' },
+    { id: 'done', get label() { return T('Đã xong'); }, icon: 'i-checkc', filter: 'done' },
   ];
 
   function icon(id) { return `<svg class="ic"><use href="#${id}"/></svg>`; }
@@ -37,9 +38,9 @@
   function buildSide() {
     const side = $('side');
     side.textContent = '';
-    const h1 = document.createElement('h4'); h1.textContent = 'Trạng thái'; side.appendChild(h1);
+    const h1 = document.createElement('h4'); h1.textContent = T('Trạng thái'); side.appendChild(h1);
     for (const n of NAV) { side.appendChild(navBtn(n.id, n.label, n.icon, () => { view.filter = n.filter; view.cat = null; })); }
-    const h2 = document.createElement('h4'); h2.textContent = 'Loại tệp'; side.appendChild(h2);
+    const h2 = document.createElement('h4'); h2.textContent = T('Loại tệp'); side.appendChild(h2);
     for (const [id, g] of Object.entries(GROUPS)) { side.appendChild(navBtn('cat-' + id, g.label, g.icon, () => { view.filter = 'all'; view.cat = id; })); }
   }
 
@@ -143,7 +144,7 @@
     tr.querySelector('.prog i').style.width = p.toFixed(1) + '%';
     tr.querySelector('.prog em').textContent = t.size || t.segTotal || t.status === 'done' ? Math.floor(p) + '%' : '';
     tr.querySelector('.stat').textContent = statusText(t);
-    tr.querySelector('.sz').textContent = fmtSize(t.size) + (t.kind !== 'file' && t.size && t.status !== 'done' ? ' (ước tính)' : '');
+    tr.querySelector('.sz').textContent = fmtSize(t.size) + (t.kind !== 'file' && t.size && t.status !== 'done' ? ' ' + T('(ước tính)') : '');
     tr.querySelector('.eta').textContent = t.status === 'downloading' ? fmtEta(t.eta) : '';
     tr.querySelector('.spd').textContent = t.status === 'downloading' ? fmtSpeed(t.speed) : '';
     tr.querySelector('.dt').textContent = fmtDate(t.createdAt);
@@ -176,9 +177,9 @@
     empty.classList.toggle('show', order.length === 0);
     if (!order.length) {
       const filtered = items.size > 0;
-      $('emptyT').textContent = filtered ? 'Không có tệp phù hợp' : 'Chưa có tệp nào';
-      $('emptyP').innerHTML = filtered ? 'Thử đổi bộ lọc hoặc từ khóa tìm kiếm.'
-        : 'Dán link bằng <kbd>Ctrl</kbd> + <kbd>V</kbd>, kéo thả link vào đây, hoặc dùng tiện ích Vexlo trên Firefox để tự bắt video và tệp tải.';
+      $('emptyT').textContent = T(filtered ? 'Không có tệp phù hợp' : 'Chưa có tệp nào');
+      $('emptyP').innerHTML = filtered ? T('Thử đổi bộ lọc hoặc từ khóa tìm kiếm.')
+        : T('Dán link bằng <kbd>Ctrl</kbd> + <kbd>V</kbd>, kéo thả link vào đây, hoặc dùng tiện ích Vexlo trên Firefox để tự bắt video và tệp tải.');
     }
   }
 
@@ -218,7 +219,7 @@
     $('bDel').disabled = sel.length === 0;
     $('bPauseAll').disabled = ![...items.values()].some((t) => t.status === 'downloading' || t.status === 'queued');
     $('bErr').disabled = ![...items.values()].some((t) => t.status === 'error');
-    $('bErr').lastElementChild.textContent = 'Xóa lỗi' + (errCount() ? ' (' + errCount() + ')' : '');
+    $('bErr').lastElementChild.textContent = (errCount() ? T('Xóa lỗi ({n})', { n: errCount() }) : T('Xóa lỗi'));
     $('bClear').disabled = ![...items.values()].some((t) => t.status === 'done');
   }
 
@@ -229,14 +230,14 @@
     let waiting = 0;
     for (const t of items.values()) { if (t.status === 'queued') { waiting++; } }
     const maxRun = settings.maxConcurrent || 0;
-    $('stActive').textContent = `${active}${maxRun ? '/' + maxRun : ''} đang tải` + (waiting ? ` · ${waiting} đang chờ` : '');
-    $('stActive').title = 'Số tệp đang tải / số tệp tối đa tải cùng lúc' + (waiting ? `. ${waiting} tệp đang xếp hàng, sẽ tự tải khi có chỗ trống.` : '');
-    $('stTotal').textContent = `${items.size} tệp`;
+    $('stActive').textContent = T('{n} đang tải', { n: active + (maxRun ? '/' + maxRun : '') }) + (waiting ? ' · ' + T('{n} đang chờ', { n: waiting }) : '');
+    $('stActive').title = T('Số tệp đang tải / số tệp tối đa tải cùng lúc') + (waiting ? T('. {n} tệp đang xếp hàng, sẽ tự tải khi có chỗ trống.', { n: waiting }) : '');
+    $('stTotal').textContent = T('{n} tệp', { n: items.size });
     const lim = settings.speedLimitKB;
-    $('stLimit').textContent = lim ? `Giới hạn: ${fmtSize(lim * 1024)}/s` : '';
+    $('stLimit').textContent = lim ? T('Giới hạn: {v}/s', { v: fmtSize(lim * 1024) }) : '';
     $('stDot').classList.toggle('ok', !!info.apiOk);
-    $('stApi').textContent = info.apiOk ? 'Trình duyệt: sẵn sàng' : 'Trình duyệt: chưa kết nối';
-    $('stApi').title = info.apiOk ? `Đang lắng nghe cổng ${info.port}` : (info.apiError || '');
+    $('stApi').textContent = T(info.apiOk ? 'Trình duyệt: sẵn sàng' : 'Trình duyệt: chưa kết nối');
+    $('stApi').title = info.apiOk ? T('Đang lắng nghe cổng {port}', { port: info.port }) : T(info.apiError || '');
   }
 
   // ---------------------------------------------------------------- actions
@@ -270,7 +271,7 @@
       $('dlgFile').checked = !!(opts.fileOption && opts.fileOption.checked);
       $('dlgRemRow').classList.toggle('hidden', !opts.remember);
       $('dlgRem').checked = false;
-      $('dlgOk').textContent = opts.okLabel || 'Đồng ý';
+      $('dlgOk').textContent = opts.okLabel || T('Đồng ý');
       $('dlgOk').classList.toggle('danger', !!opts.danger);
       $('dlgOk').classList.toggle('pri', !opts.danger);
       let settled = false;
@@ -309,13 +310,13 @@
     if (!sel.length) { return; }
     const done = sel.filter((t) => t.status === 'done');
     const unfinished = sel.length - done.length;
-    const unfinishedNote = unfinished ? ` ${unfinished} mục chưa tải xong sẽ bị xóa dữ liệu tải dở.` : '';
+    const unfinishedNote = unfinished ? T(' {n} mục chưa tải xong sẽ bị xóa dữ liệu tải dở.', { n: unfinished }) : '';
     let deleteFile = false;
 
     if (preset === 'files') {
       const r = await askDialog({
-        title: 'Xóa kèm tệp', danger: true, okLabel: 'Xóa cả tệp',
-        message: `Xóa ${sel.length} mục khỏi danh sách và xóa luôn ${done.length} tệp đã tải trên ổ đĩa? Không thể khôi phục.${unfinishedNote}`,
+        title: T('Xóa kèm tệp'), danger: true, okLabel: T('Xóa cả tệp'),
+        message: T('Xóa {n} mục khỏi danh sách và xóa luôn {m} tệp đã tải trên ổ đĩa? Không thể khôi phục.', { n: sel.length, m: done.length }) + unfinishedNote,
       });
       if (!r.ok) { return; }
       deleteFile = true;
@@ -323,19 +324,19 @@
       const mode = preset === 'list' ? 'list' : (done.length ? (settings.deleteMode || 'ask') : 'list');
       if (mode === 'ask') {
         const r = await askDialog({
-          title: sel.length > 1 ? `Xóa ${sel.length} mục` : 'Xóa mục này',
-          message: `Xóa ${sel.length} mục khỏi danh sách tải?${unfinishedNote}`,
-          okLabel: 'Xóa', danger: false, fileOption: { checked: false }, remember: true,
+          title: sel.length > 1 ? T('Xóa {n} mục', { n: sel.length }) : T('Xóa mục này'),
+          message: T('Xóa {n} mục khỏi danh sách tải?', { n: sel.length }) + unfinishedNote,
+          okLabel: T('Xóa'), danger: false, fileOption: { checked: false }, remember: true,
         });
         if (!r.ok) { return; }
         deleteFile = r.deleteFile;
-        if (r.remember) { settings = await bridge.setSettings({ deleteMode: deleteFile ? 'files' : 'list' }); toast('Đã lưu lựa chọn. Đổi lại trong Tùy chọn › Chung.'); }
+        if (r.remember) { settings = await bridge.setSettings({ deleteMode: deleteFile ? 'files' : 'list' }); toast(T('Đã lưu lựa chọn. Đổi lại trong Tùy chọn › Chung.')); }
       } else {
         deleteFile = mode === 'files';
         if (unfinished || sel.length > 1) {
           const r = await askDialog({
-            title: 'Xóa khỏi danh sách', okLabel: 'Xóa',
-            message: `Xóa ${sel.length} mục khỏi danh sách${deleteFile ? ' và xóa luôn tệp đã tải' : (done.length ? ' (giữ lại tệp đã tải)' : '')}?${unfinishedNote}`,
+            title: T('Xóa khỏi danh sách'), okLabel: T('Xóa'),
+            message: T('Xóa {n} mục khỏi danh sách{extra}?', { n: sel.length, extra: deleteFile ? T(' và xóa luôn tệp đã tải') : (done.length ? T(' (giữ lại tệp đã tải)') : '') }) + unfinishedNote,
             danger: deleteFile,
           });
           if (!r.ok) { return; }
@@ -356,17 +357,17 @@
     const canRes = sel.some((t) => t.status === 'paused' || t.status === 'error');
     const canPause = sel.some((t) => t.status === 'downloading' || t.status === 'queued');
     const entries = [
-      one && one.status === 'done' && ['Mở tệp', 'i-open', () => openFile(one.id)],
-      one && ['Mở thư mục chứa tệp', 'i-folder', () => bridge.showInFolder(one.id)],
-      canRes && ['Tiếp tục', 'i-play', () => bridge.resume(sel.map((t) => t.id))],
-      canPause && ['Tạm dừng', 'i-pause', () => bridge.pause(sel.map((t) => t.id))],
-      one && ['Sao chép link', 'i-copy', async () => { await bridge.copyLink(one.id); toast('Đã sao chép link'); }],
-      one && one.meta && one.meta.page && ['Mở trang web gốc', 'i-open', async () => {
-        if (!(await bridge.openPage(one.id))) { toast('Không có địa chỉ trang gốc', true); }
+      one && one.status === 'done' && [T('Mở tệp'), 'i-open', () => openFile(one.id)],
+      one && [T('Mở thư mục chứa tệp'), 'i-folder', () => bridge.showInFolder(one.id)],
+      canRes && [T('Tiếp tục'), 'i-play', () => bridge.resume(sel.map((t) => t.id))],
+      canPause && [T('Tạm dừng'), 'i-pause', () => bridge.pause(sel.map((t) => t.id))],
+      one && [T('Sao chép link'), 'i-copy', async () => { await bridge.copyLink(one.id); toast(T('Đã sao chép link')); }],
+      one && one.meta && one.meta.page && [T('Mở trang web gốc'), 'i-open', async () => {
+        if (!(await bridge.openPage(one.id))) { toast(T('Không có địa chỉ trang gốc'), true); }
       }],
       'sep',
-      ['Xóa khỏi danh sách (giữ tệp)', 'i-trash', () => removeSelected('list')],
-      sel.some((t) => t.status === 'done') && ['Xóa kèm tệp trên ổ đĩa…', 'i-trash', () => removeSelected('files'), true],
+      [T('Xóa khỏi danh sách (giữ tệp)'), 'i-trash', () => removeSelected('list')],
+      sel.some((t) => t.status === 'done') && [T('Xóa kèm tệp trên ổ đĩa…'), 'i-trash', () => removeSelected('files'), true],
     ].filter(Boolean);
     const ctx = $('ctx');
     ctx.textContent = '';
@@ -428,8 +429,8 @@
       connections: Number($('aConn').value) || undefined, quality: $('aQual').value, start,
     });
     closeModals();
-    if (res.errors && res.errors.length) { toast(`${res.errors.length} link không hợp lệ`, true); }
-    else { toast(start ? `Đã thêm ${res.ids.length} tệp` : `Đã thêm ${res.ids.length} tệp (chưa tải)`); }
+    if (res.errors && res.errors.length) { toast(T('{n} link không hợp lệ', { n: res.errors.length }), true); }
+    else { toast(T(start ? 'Đã thêm {n} tệp' : 'Đã thêm {n} tệp (chưa tải)', { n: res.ids.length })); }
     view.filter = 'all'; view.cat = null; refresh();
   }
   $('aStart').addEventListener('click', () => submitAdd(true));
@@ -442,7 +443,9 @@
     $('sDir').value = settings.downloadDir || '';
     $('sCat').checked = !!settings.categorize;
     $('sConfirm').checked = !!settings.confirm;
+    $('sLang').value = settings.language || 'auto';
     $('sProg').checked = settings.progressWindow !== false;
+    $('sFloat').checked = settings.progressFloat !== false;
     $('sOnErr').value = settings.progressOnError || 'ask';
     $('sUpd').checked = settings.autoUpdate !== false;
     $('sSchOn').checked = !!settings.scheduleEnabled;
@@ -464,7 +467,7 @@
 
   function renderApiStatus() {
     const ok = info.apiOk;
-    $('bStatus').innerHTML = `<span class="pill ${ok ? '' : 'warn'}">${ok ? 'Đang lắng nghe cổng ' + info.port : 'Chưa sẵn sàng'}</span>`;
+    $('bStatus').innerHTML = `<span class="pill ${ok ? '' : 'warn'}">${ok ? T('Đang lắng nghe cổng {port}', { port: info.port }) : T('Chưa sẵn sàng')}</span>`;
     if (!ok && info.apiError) { const s = document.createElement('div'); s.className = 'hint'; s.textContent = info.apiError; $('bStatus').appendChild(s); }
   }
 
@@ -475,18 +478,18 @@
   $('sBrowse').addEventListener('click', async () => { const d = await bridge.chooseFolder($('sDir').value); if (d) { $('sDir').value = d; } });
   $('bExt').addEventListener('click', () => bridge.openExtensionFolder());
   $('bCopyTok').addEventListener('click', async () => {
-    try { await navigator.clipboard.writeText(settings.token || ''); toast('Đã chép mã ghép nối'); } catch { toast('Không chép được', true); }
+    try { await navigator.clipboard.writeText(settings.token || ''); toast(T('Đã chép mã ghép nối')); } catch { toast(T('Không chép được'), true); }
   });
   $('sSave').addEventListener('click', async () => {
     settings = await bridge.setSettings({
-      downloadDir: $('sDir').value.trim(), categorize: $('sCat').checked, confirm: $('sConfirm').checked, notify: $('sNotify').checked, progressWindow: $('sProg').checked, progressOnError: $('sOnErr').value, autoUpdate: $('sUpd').checked,
+      downloadDir: $('sDir').value.trim(), categorize: $('sCat').checked, confirm: $('sConfirm').checked, notify: $('sNotify').checked, language: $('sLang').value, progressWindow: $('sProg').checked, progressFloat: $('sFloat').checked, progressOnError: $('sOnErr').value, autoUpdate: $('sUpd').checked,
       scheduleEnabled: $('sSchOn').checked, scheduleStart: $('sSchStart').value, scheduleStop: $('sSchStop').value,
       scheduleDays: [0, 1, 2, 3, 4, 5, 6].filter((d) => $('sDay' + d).checked), deleteMode: $('sDelete').value,
       closeToTray: $('sTray').checked, startWithOS: $('sStart').checked, connections: Number($('sConn').value),
       maxConcurrent: Number($('sMax').value), speedLimitKB: Number($('sLimit').value), port: Number($('sPort').value),
     });
     closeModals();
-    toast('Đã lưu tùy chọn');
+    toast(T('Đã lưu tùy chọn'));
     updateStatus();
   });
   $('stApi').addEventListener('click', openSettings);
@@ -502,16 +505,16 @@
     const ids = [...items.values()].filter((t) => t.status === 'error').map((t) => t.id);
     if (!ids.length) { return; }
     await bridge.remove(ids, false);
-    toast(`Đã xóa ${ids.length} tải bị lỗi`);
+    toast(T('Đã xóa {n} tải bị lỗi', { n: ids.length }));
   });
-  $('bClear').addEventListener('click', async () => { await bridge.clearDone(); toast('Đã xóa các tệp đã xong khỏi danh sách'); });
+  $('bClear').addEventListener('click', async () => { await bridge.clearDone(); toast(T('Đã xóa các tệp đã xong khỏi danh sách')); });
   $('bSettings').addEventListener('click', openSettings);
   // "When everything is finished": chosen once here, asked once (a single countdown) when the last file completes.
   bridge.afterGet().then((v) => { $('afterSel').value = v || 'none'; }).catch(() => {});
   bridge.on('after:changed', (v) => { $('afterSel').value = v || 'none'; });
   $('afterSel').addEventListener('change', () => {
     bridge.afterSet($('afterSel').value);
-    if ($('afterSel').value !== 'none') { toast('Sẽ thực hiện khi tệp cuối cùng tải xong (có đếm ngược 60 giây để hủy)'); }
+    if ($('afterSel').value !== 'none') { toast(T('Sẽ thực hiện khi tệp cuối cùng tải xong (có đếm ngược 60 giây để hủy)')); }
   });
   $('q').addEventListener('input', (e) => { view.q = e.target.value; refresh(); });
 

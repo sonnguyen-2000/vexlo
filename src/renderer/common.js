@@ -4,14 +4,16 @@
   else { root.SG = factory(); }
 }(typeof self !== 'undefined' ? self : this, function () {
   'use strict';
+  const I = (typeof module === 'object' && module.exports) ? require('./i18n') : self.I18N;
+  const tr = (k, v) => I.tr(k, v);
 
   const GROUPS = {
-    video: { label: 'Video', icon: 'i-film', ext: 'mp4 mkv avi mov wmv flv f4v webm m4v mpg mpeg 3gp ogv ts m2ts m3u8 mpd' },
-    music: { label: 'Âm thanh', icon: 'i-music', ext: 'mp3 m4a aac wav flac ogg oga opus wma weba amr' },
-    archive: { label: 'Nén', icon: 'i-archive', ext: 'zip rar 7z tar gz tgz bz2 xz zst iso img cab' },
-    program: { label: 'Chương trình', icon: 'i-package', ext: 'exe msi msix apk dmg pkg deb rpm appimage bat jar' },
-    document: { label: 'Tài liệu', icon: 'i-doc', ext: 'pdf doc docx xls xlsx ppt pptx txt epub mobi csv rtf odt ods' },
-    other: { label: 'Khác', icon: 'i-file', ext: '' },
+    video: { get label() { return tr('Video'); }, icon: 'i-film', ext: 'mp4 mkv avi mov wmv flv f4v webm m4v mpg mpeg 3gp ogv ts m2ts m3u8 mpd' },
+    music: { get label() { return tr('Âm thanh'); }, icon: 'i-music', ext: 'mp3 m4a aac wav flac ogg oga opus wma weba amr' },
+    archive: { get label() { return tr('Nén'); }, icon: 'i-archive', ext: 'zip rar 7z tar gz tgz bz2 xz zst iso img cab' },
+    program: { get label() { return tr('Chương trình'); }, icon: 'i-package', ext: 'exe msi msix apk dmg pkg deb rpm appimage bat jar' },
+    document: { get label() { return tr('Tài liệu'); }, icon: 'i-doc', ext: 'pdf doc docx xls xlsx ppt pptx txt epub mobi csv rtf odt ods' },
+    other: { get label() { return tr('Khác'); }, icon: 'i-file', ext: '' },
   };
   const BY_EXT = {};
   for (const [id, g] of Object.entries(GROUPS)) { for (const e of g.ext.split(' ').filter(Boolean)) { BY_EXT[e] = id; } }
@@ -40,10 +42,10 @@
     const h = Math.floor((sec % 86400) / 3600);
     const m = Math.floor((sec % 3600) / 60);
     const s = sec % 60;
-    if (d) { return `${d} ngày ${h} giờ`; }
-    if (h) { return `${h} giờ ${String(m).padStart(2, '0')} phút`; }
-    if (m) { return `${m} phút ${String(s).padStart(2, '0')} giây`; }
-    return `${s} giây`;
+    if (d) { return tr('{d} ngày {h} giờ', { d, h }); }
+    if (h) { return tr('{h} giờ {m} phút', { h, m: String(m).padStart(2, '0') }); }
+    if (m) { return tr('{m} phút {s} giây', { m, s: String(s).padStart(2, '0') }); }
+    return tr('{s} giây', { s });
   }
 
   function fmtDate(ts, now = Date.now()) {
@@ -52,9 +54,9 @@
     const p = (x) => String(x).padStart(2, '0');
     const hm = `${p(d.getHours())}:${p(d.getMinutes())}`;
     const t = new Date(now);
-    if (d.toDateString() === t.toDateString()) { return 'Hôm nay ' + hm; }
+    if (d.toDateString() === t.toDateString()) { return tr('Hôm nay {t}', { t: hm }); }
     const y = new Date(now - 86400000);
-    if (d.toDateString() === y.toDateString()) { return 'Hôm qua ' + hm; }
+    if (d.toDateString() === y.toDateString()) { return tr('Hôm qua {t}', { t: hm }); }
     return `${p(d.getDate())}/${p(d.getMonth() + 1)}/${d.getFullYear()}`;
   }
 
@@ -72,16 +74,16 @@
   /** Text under the progress bar. */
   function statusText(t) {
     switch (t.status) {
-      case 'done': return 'Hoàn tất';
-      case 'error': return t.error || 'Lỗi';
-      case 'queued': return 'Đang chờ trong hàng đợi';
-      case 'paused': return t.downloaded > 0 ? 'Đã dừng' : 'Chưa bắt đầu';
+      case 'done': return tr('Hoàn tất');
+      case 'error': return tr(t.error || 'Lỗi');
+      case 'queued': return tr('Đang chờ trong hàng đợi');
+      case 'paused': return tr(t.downloaded > 0 ? 'Đã dừng' : 'Chưa bắt đầu');
       case 'downloading': {
-        if (t.phase && t.phase !== 'download') { return PHASES[t.phase] || t.phase; }
+        if (t.phase && t.phase !== 'download') { return PHASES[t.phase] ? tr(PHASES[t.phase]) : t.phase; }
         const bits = [];
-        if (t.kind !== 'file' && t.segTotal) { bits.push(`${t.segDone}/${t.segTotal} đoạn`); }
-        else if (t.connections > 1) { bits.push(`${t.connections} kết nối`); }
-        return bits.join(' · ') || 'Đang tải';
+        if (t.kind !== 'file' && t.segTotal) { bits.push(tr('{a}/{b} đoạn', { a: t.segDone, b: t.segTotal })); }
+        else if (t.connections > 1) { bits.push(tr('{n} kết nối', { n: t.connections })); }
+        return bits.join(' · ') || tr('Đang tải');
       }
       default: return '';
     }

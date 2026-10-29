@@ -3,13 +3,14 @@
   'use strict';
   const $ = (id) => document.getElementById(id);
   const api = window.vexlo;
+  const T = window.I18N.tr;
   const LABEL = { shutdown: 'Máy sẽ tắt sau ', sleep: 'Máy sẽ chuyển sang chế độ ngủ sau ', hibernate: 'Máy sẽ ngủ đông sau ', exit: 'Vexlo sẽ thoát sau ' };
   async function init() {
     if (!api) { return; }
     const info = await api.afterCountdown().catch(() => null);
     if (!info) { return; }
     let left = info.seconds || 60;
-    const draw = () => { $('sec').textContent = String(left); $('msg').textContent = (LABEL[info.action] || '') + left + ' giây.'; };
+    const draw = () => { $('sec').textContent = String(left); $('msg').textContent = T(LABEL[info.action] || '') + left + T(' giây.'); };
     draw();
     const timer = setInterval(() => {
       left--;

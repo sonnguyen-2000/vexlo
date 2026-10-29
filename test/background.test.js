@@ -39,7 +39,7 @@ async function startApp({ addImpl } = {}) {
 // Firefox attaches "Origin: moz-extension://<uuid>" to cross-origin fetches made by an extension page.
 const extFetch = (url, opts = {}) => fetch(url, { ...opts, headers: { origin: 'moz-extension://test-uuid', ...(opts.headers || {}) } });
 
-async function loadBackground({ port, settings = {}, tabs = {}, cookies = [] }) {
+async function loadBackground({ port, settings = {}, tabs = {}, cookies = [], native }) {
   const calls = { pause: [], resume: [], cancel: [], erase: [], badge: [], notify: [], menus: [] };
   const L = {}; // captured listeners
   const cap = (name) => ({ addListener: (fn) => { L[name] = fn; } });
@@ -57,7 +57,7 @@ async function loadBackground({ port, settings = {}, tabs = {}, cookies = [] }) 
     cookies: { getAll: async () => cookies },
     contextMenus: { removeAll: async () => {}, create: (o) => { calls.menus.push(o.id); }, onClicked: cap('menu') },
     notifications: { create: async (o) => { calls.notify.push(o.message); } },
-    runtime: { getURL: (p) => 'moz-extension://x/' + p, onMessage: cap('message') },
+    runtime: { getURL: (p) => 'moz-extension://x/' + p, onMessage: cap('message'), ...(native ? { sendNativeMessage: native } : {}) },
   };
   const sandbox = {
     browser, fetch: extFetch, AbortController, URL, console, setTimeout, clearTimeout, Promise, Map, Set, JSON, Date, Math, Error, Number, String, Object, Array, RegExp, encodeURIComponent, decodeURIComponent,
@@ -198,6 +198,18 @@ test('takeover: app rejects the request -> download is resumed in Firefox, nothi
   await bg.L.dlCreated({ id: 8, url: 'https://x.example/f.bin', incognito: false });
   assert.deepEqual(plain(bg.calls.cancel), []);
   assert.deepEqual(plain(bg.calls.resume), [8]);
+  await api.close();
+});
+
+test('takeover ignores old downloads from the browser history (finished, or started long ago)', async () => {
+  const { api, manager } = await startApp();
+  const bg = await loadBackground({ port: api.port, tabs: TAB });
+  await bg.L.dlCreated({ id: 61, url: 'https://x.example/old-installer.exe', state: 'complete', startTime: new Date(Date.now() - 3 * 3600e3).toISOString() });
+  await bg.L.dlCreated({ id: 62, url: 'https://x.example/old2.exe', state: 'in_progress', startTime: new Date(Date.now() - 3 * 3600e3).toISOString() });
+  assert.equal(manager.added.length, 0);
+  assert.deepEqual(plain(bg.calls.pause), []);
+  await bg.L.dlCreated({ id: 63, url: 'https://x.example/new.exe', state: 'in_progress', startTime: new Date().toISOString() });
+  assert.equal(manager.added.length, 1);
   await api.close();
 });
 
@@ -422,4 +434,45 @@ test('wrong pairing code and a vanished entry get their own readable messages, n
   assert.equal(gone.code, 'app-error');
   assert.match(gone.error, /gộp|merged/i);
   await api.close();
+});
+
+// ---------------------------------------------------------------- auto-launch (IDM-style)
+
+test('app not running: the extension asks the native host to launch it, then sends the item', async () => {
+  const manager = fakeManager();
+  const api = createApi(manager, { port: 0, token: 'tok' });
+  opened.push(api);
+  const asked = [];
+  // The "host" starts the app (listen) when it receives {cmd:'launch'} and returns the config.
+  const native = async (name, msg) => {
+    asked.push(msg.cmd);
+    if (msg.cmd === 'launch') { setTimeout(() => api.listen().catch(() => {}), 300); }
+    return { ok: true, port: 0, token: 'tok' };
+  };
+  // Pick a free port first so the extension can find the app once it "starts".
+  const probe = createApi(fakeManager(), { port: 0 });
+  await probe.listen();
+  const port = probe.port;
+  await probe.close();
+  const real = createApi(manager, { port, token: 'tok' });
+  opened.push(real);
+  const native2 = async (name, msg) => {
+    asked.push(msg.cmd);
+    if (msg.cmd === 'launch') { setTimeout(() => real.listen().catch(() => {}), 300); }
+    return { ok: true, port, token: 'tok' };
+  };
+  const bg = await loadBackground({ port, settings: { token: 'tok' }, tabs: TAB, native: native2 });
+  const st = await bg.send({ type: 'status' });
+  assert.equal(st.ok, true);
+  assert.ok(asked.includes('launch'));
+  await real.close();
+  void native;
+});
+
+test('app not running and no host: still reported as not running (no hang)', async () => {
+  const bg = await loadBackground({ port: 1, tabs: TAB, native: async () => { throw new Error('no host'); } });
+  const t0 = Date.now();
+  const st = await bg.send({ type: 'status' });
+  assert.equal(st.ok, false);
+  assert.ok(Date.now() - t0 < 20000);
 });

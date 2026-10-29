@@ -13,6 +13,7 @@ const { findDuplicate } = require('../core/dupes');
 const { uniquePath } = require('../core/util');
 const { dueActions } = require('../core/schedule');
 const { execFile } = require('child_process');
+const I18N = require('../renderer/i18n');
 
 const VERSION = require('../../package.json').version;
 const RENDERER = path.join(__dirname, '..', 'renderer');
@@ -23,9 +24,9 @@ const EXT_DIR = app.isPackaged ? path.join(process.resourcesPath, 'extension') :
 const DEFAULTS = {
   downloadDir: '', categorize: true, maxConcurrent: 2, connections: 8, speedLimitKB: 0, confirm: true,
   closeToTray: true, startWithOS: false, notify: true, port: 6877, token: '', deleteMode: 'ask',
-  progressWindow: true, progressAutoClose: true, progressOnError: 'ask',
+  progressWindow: true, progressFloat: true, progressAutoClose: true, progressOnError: 'ask',
   scheduleEnabled: false, scheduleStart: '01:00', scheduleStop: '', scheduleDays: [0, 1, 2, 3, 4, 5, 6],
-  autoUpdate: true,
+  autoUpdate: true, language: 'auto',
 };
 
 let settings = { ...DEFAULTS };
@@ -56,6 +57,8 @@ function clampSettings(s) {
     startWithOS: !!s.startWithOS,
     notify: !!s.notify,
     progressWindow: s.progressWindow !== false,
+    language: ['auto', 'vi', 'en'].includes(s.language) ? s.language : 'auto',
+    progressFloat: s.progressFloat !== false,
     progressAutoClose: s.progressAutoClose !== false,
     progressOnError: ['ask', 'close', 'keep'].includes(s.progressOnError) ? s.progressOnError : 'ask',
     scheduleEnabled: !!s.scheduleEnabled,
@@ -79,6 +82,15 @@ function loadSettings() {
 function saveSettings() {
   try { fs.mkdirSync(path.dirname(settingsFile()), { recursive: true }); fs.writeFileSync(settingsFile(), JSON.stringify(settings, null, 2)); } catch { /* ignore */ }
 }
+
+/** 'vi' or 'en': the chosen language, or the system language when set to automatic. */
+function uiLang() {
+  if (settings && settings.language === 'vi') { return 'vi'; }
+  if (settings && settings.language === 'en') { return 'en'; }
+  return String(app.getLocale() || '').toLowerCase().startsWith('vi') ? 'vi' : 'en';
+}
+function T(key, vars) { I18N.setLang(uiLang()); return I18N.tr(key, vars); }
+const pageOpts = () => ({ query: { lang: uiLang() } });
 
 function applySettings(prev) {
   manager.downloadDir = settings.downloadDir;
@@ -106,7 +118,7 @@ function registerNativeHost() {
     const dir = path.join(app.getPath('userData'), 'native');
     fs.mkdirSync(dir, { recursive: true });
     const cmd = path.join(dir, 'host.cmd');
-    fs.writeFileSync(cmd, `@echo off\r\nset ELECTRON_RUN_AS_NODE=1\r\n"${process.execPath}" "${hostJs}" "${settingsFile()}"\r\n`);
+    fs.writeFileSync(cmd, `@echo off\r\nset ELECTRON_RUN_AS_NODE=1\r\n"${process.execPath}" "${hostJs}" "${settingsFile()}" "${app.isPackaged ? process.execPath : ''}"\r\n`);
     const reg = (key, file) => execFile('reg', ['add', key + '\\' + NATIVE_NAME, '/ve', '/t', 'REG_SZ', '/d', file, '/f'], { windowsHide: true }, () => {});
     // Firefox
     const ffManifest = path.join(dir, 'host.json');
@@ -134,7 +146,7 @@ async function startApi() {
     onAdd: handleExternalAdd, onShowWindow: () => {}, getSettings: () => ({ confirm: settings.confirm }),
   });
   try { await api.listen(); } catch (e) {
-    apiError = e.code === 'EADDRINUSE' ? `Cổng ${settings.port} đang được chương trình khác dùng` : String(e.message || e);
+    apiError = e.code === 'EADDRINUSE' ? T('Cổng {port} đang được chương trình khác dùng', { port: settings.port }) : String(e.message || e);
     api = null;
   }
   broadcast('app:status', appInfo());
@@ -150,11 +162,11 @@ function dupNote(filename, dir) {
   const full = path.join(dir, filename);
   if (!fs.existsSync(full)) { return ''; }
   const alt = path.basename(uniquePath(dir, filename));
-  return `Tệp "${filename}" đã có trong thư mục này. Bản mới sẽ được lưu thành "${alt}".`;
+  return T('Tệp "{f}" đã có trong thư mục này. Bản mới sẽ được lưu thành "{alt}".', { f: filename, alt });
 }
 
 function notifyDuplicate(task) {
-  if (Notification.isSupported()) { new Notification({ title: 'Vexlo', body: `Đã có trong danh sách tải: ${task.filename || task.url}`, silent: true }).show(); }
+  if (Notification.isSupported()) { new Notification({ title: 'Vexlo', body: T('Đã có trong danh sách tải: {f}', { f: task.filename || task.url }), silent: true }).show(); }
 }
 
 /** Items coming from the browser: show an IDM-style confirmation window unless the user turned it off. */
@@ -194,7 +206,7 @@ function baseOptions(extra) {
 function createMainWindow({ hidden = false } = {}) {
   mainWin = new BrowserWindow(baseOptions({ width: 1060, height: 660, minWidth: 780, minHeight: 440, title: 'Vexlo' }));
   secureWindow(mainWin);
-  mainWin.loadFile(path.join(RENDERER, 'index.html'));
+  mainWin.loadFile(path.join(RENDERER, 'index.html'), pageOpts());
   mainWin.once('ready-to-show', () => { if (!hidden) { mainWin.show(); } });
   mainWin.on('close', (e) => {
     if (!quitting && settings.closeToTray && tray) { e.preventDefault(); mainWin.hide(); }
@@ -212,7 +224,7 @@ function showMain() {
 function openConfirm(id, { replaced = false } = {}) {
   const win = new BrowserWindow(baseOptions({
     width: 440, height: 260, useContentSize: true, resizable: false, minimizable: false, maximizable: false, alwaysOnTop: true,
-    title: 'Thông tin tải xuống',
+    title: T('Thông tin tải xuống'),
   }));
   secureWindow(win);
   const wcId = win.webContents.id;
@@ -226,7 +238,7 @@ function openConfirm(id, { replaced = false } = {}) {
     if (!win.isDestroyed()) { win.close(); }
   };
   win.webContents.once('did-fail-load', fallbackStart);
-  win.loadFile(path.join(RENDERER, 'confirm.html')).catch(fallbackStart);
+  win.loadFile(path.join(RENDERER, 'confirm.html'), pageOpts()).catch(fallbackStart);
   // Show only once the page has reported its real height (no jump from a default size); fall back after a moment.
   const reveal = () => { if (!win.isDestroyed() && !win.isVisible()) { win.show(); win.focus(); } };
   win.once('ready-to-show', () => setTimeout(reveal, 350));
@@ -252,20 +264,22 @@ function openConfirm(id, { replaced = false } = {}) {
 function openProgress(id) {
   if (!settings.progressWindow || !manager.get(id)) { return; }
   const existing = progressByTask.get(id);
-  if (existing && !existing.isDestroyed()) { existing.show(); existing.focus(); return; }
+  if (existing && !existing.isDestroyed()) { existing.setAlwaysOnTop(!!settings.progressFloat, 'floating'); existing.show(); existing.focus(); return; }
   const n = progressByTask.size % 6;
   const win = new BrowserWindow(baseOptions({
     width: 440, height: 210, useContentSize: true, resizable: false, minimizable: true, maximizable: false,
-    title: 'Đang tải', x: undefined, y: undefined,
+    title: T('Đang tải'), x: undefined, y: undefined,
   }));
   win.setMenu(null);
   secureWindow(win);
   const wcId = win.webContents.id;
   progressWins.set(wcId, { id, win });
   progressByTask.set(id, win);
-  win.loadFile(path.join(RENDERER, 'progress.html')).catch(() => { if (!win.isDestroyed()) { win.close(); } });
+  win.loadFile(path.join(RENDERER, 'progress.html'), pageOpts()).catch(() => { if (!win.isDestroyed()) { win.close(); } });
   win.once('ready-to-show', () => {
     if (n) { const [x, y] = win.getPosition(); win.setPosition(x + n * 28, y + n * 28); }
+    // Floating: stays above other apps without stealing keyboard focus. Quiet: a normal window that can sit behind others.
+    if (settings.progressFloat) { win.setAlwaysOnTop(true, 'floating'); }
     win.showInactive();
   });
   win.on('closed', () => { progressWins.delete(wcId); if (progressByTask.get(id) === win) { progressByTask.delete(id); } });
@@ -275,19 +289,24 @@ function broadcast(channel, data) {
   for (const w of BrowserWindow.getAllWindows()) { if (!w.isDestroyed()) { w.webContents.send(channel, data); } }
 }
 
+function buildTrayMenu() {
+  if (!tray) { return; }
+  tray.setContextMenu(Menu.buildFromTemplate([
+    { label: T('Mở Vexlo'), click: showMain },
+    { label: T('Tạm dừng tất cả'), click: () => manager.pauseAll() },
+    { label: T('Tiếp tục tất cả'), click: () => manager.resumeAll() },
+    { type: 'separator' },
+    { label: T('Thoát'), click: () => { quitting = true; app.quit(); } },
+  ]));
+}
+
 function createTray() {
   const src = fs.existsSync(TRAY_ICON) ? TRAY_ICON : ICON;
   if (!fs.existsSync(src)) { return; }
   // A dedicated, simpler glyph stays readable at 16-24 px; Electron picks the right size for the display scale.
   tray = new Tray(nativeImage.createFromPath(src).resize({ width: 20, height: 20, quality: 'best' }));
   tray.setToolTip('Vexlo');
-  tray.setContextMenu(Menu.buildFromTemplate([
-    { label: 'Mở Vexlo', click: showMain },
-    { label: 'Tạm dừng tất cả', click: () => manager.pauseAll() },
-    { label: 'Tiếp tục tất cả', click: () => manager.resumeAll() },
-    { type: 'separator' },
-    { label: 'Thoát', click: () => { quitting = true; app.quit(); } },
-  ]));
+  buildTrayMenu();
   tray.on('click', showMain);
 }
 
@@ -331,7 +350,7 @@ function registerIpc() {
   });
   ipcMain.handle('dl:open', async (_e, id) => {
     const p = taskPath(id);
-    if (!p || !fs.existsSync(p)) { return 'Không tìm thấy tệp (có thể đã bị xóa hoặc di chuyển)'; }
+    if (!p || !fs.existsSync(p)) { return T('Không tìm thấy tệp (có thể đã bị xóa hoặc di chuyển)'); }
     return (await shell.openPath(p)) || '';
   });
   ipcMain.handle('dl:showInFolder', (_e, id) => {
@@ -355,6 +374,10 @@ function registerIpc() {
     settings = clampSettings({ ...settings, ...patch });
     saveSettings();
     applySettings(prev);
+    if (prev.language !== settings.language) {
+      buildTrayMenu();
+      if (mainWin && !mainWin.isDestroyed()) { mainWin.loadFile(path.join(RENDERER, 'index.html'), pageOpts()); }
+    }
     broadcast('settings:changed', settings);
     return settings;
   });
@@ -426,10 +449,10 @@ function runSchedule() {
     if (a === 'start') {
       let n = 0;
       for (const t of manager.list()) { if (!t.pending && t.status === 'paused') { manager.resume(t.id); n++; } }
-      note('Lịch tải: bắt đầu', n ? `Đang tải ${n} tệp đã hẹn.` : 'Không có tệp nào đang chờ.');
+      note(T('Lịch tải: bắt đầu'), n ? T('Đang tải {n} tệp đã hẹn.', { n }) : T('Không có tệp nào đang chờ.'));
     } else {
       manager.pauseAll();
-      note('Lịch tải: đã dừng', 'Các tệp đang tải được tạm dừng theo giờ đã hẹn.');
+      note(T('Lịch tải: đã dừng'), T('Các tệp đang tải được tạm dừng theo giờ đã hẹn.'));
     }
   }
 }
@@ -469,7 +492,7 @@ function openCountdown() {
   win.setMenu(null);
   secureWindow(win);
   countdownWin = win;
-  win.loadFile(path.join(RENDERER, 'countdown.html')).catch(() => { runAfterAction(); });
+  win.loadFile(path.join(RENDERER, 'countdown.html'), pageOpts()).catch(() => { runAfterAction(); });
   win.once('ready-to-show', () => { win.show(); win.focus(); });
   win.on('closed', () => { if (countdownWin === win) { countdownWin = null; if (!win.__acting) { setAfterAll('none'); } } }); // closing = cancel
 }
@@ -501,7 +524,7 @@ function wireManager() {
     broadcast('dl:update', s);
     if (afterAll !== 'none') { afterArmed++; checkAfterAll(); }
     if (settings.notify && Notification.isSupported()) {
-      const n = new Notification({ title: 'Đã tải xong', body: s.filename, silent: false });
+      const n = new Notification({ title: T('Đã tải xong'), body: s.filename, silent: false });
       n.on('click', () => { if (s.path) { shell.showItemInFolder(s.path); } });
       n.show();
     }
@@ -541,7 +564,7 @@ function startAutoUpdate() {
 
 function main() {
   if (!app.requestSingleInstanceLock()) { app.quit(); return; }
-  app.on('second-instance', () => showMain());
+  app.on('second-instance', (_e, argv) => { if (!(argv || []).includes('--hidden')) { showMain(); } });
   app.setAppUserModelId('dev.vexlo.app');
   Menu.setApplicationMenu(null);
 

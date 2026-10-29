@@ -4,6 +4,7 @@
   const $ = (id) => document.getElementById(id);
   const api = window.vexlo;
   const SG = window.SG;
+  const T = window.I18N.tr;
   let task = null;
   let autoTimer = null;
   let onErr = 'ask';
@@ -16,7 +17,7 @@
     $('badgeUse').setAttribute('href', '#' + SG.GROUPS[cat].icon);
     $('name').textContent = t.filename || t.url || '';
     $('name').title = t.filename || '';
-    const meta = [t.kind === 'hls' ? 'Luồng HLS' : t.kind === 'dash' ? 'Luồng DASH' : SG.GROUPS[cat].label, SG.hostOf(t.url)].filter(Boolean);
+    const meta = [t.kind === 'hls' ? T('Luồng HLS') : t.kind === 'dash' ? T('Luồng DASH') : SG.GROUPS[cat].label, SG.hostOf(t.url)].filter(Boolean);
     $('meta').textContent = meta.join('  ·  ');
     $('meta').title = t.url || '';
     const p = SG.percent(t);
@@ -30,18 +31,18 @@
     $('stat').textContent = SG.statusText(t);
     $('stat').className = t.status === 'error' ? 'err' : '';
     $('stat').title = $('stat').textContent;
-    document.title = t.status === 'done' ? 'Đã tải xong' : Math.floor(p) + '% · ' + (t.filename || 'Đang tải');
+    document.title = t.status === 'done' ? T('Đã tải xong') : Math.floor(p) + '% · ' + (t.filename || T('Đang tải'));
 
     const isErr = t.status === 'error';
     $('stats').classList.toggle('hidden', isErr && onErr === 'ask');
     $('errAsk').classList.toggle('hidden', !(isErr && onErr === 'ask'));
-    $('errTxt').textContent = 'Tải bị lỗi: ' + (t.error || 'không rõ nguyên nhân');
+    $('errTxt').textContent = T('Tải bị lỗi: {e}', { e: T(t.error || 'không rõ nguyên nhân') });
     if (!isErr) { closedForErr = false; }
     else if (onErr === 'close' && !closedForErr) { closedForErr = true; setTimeout(() => api.progressClose(), 600); }
     const done = t.status === 'done';
     $('actDl').classList.toggle('hidden', done);
     $('actDone').classList.toggle('hidden', !done);
-    $('pause').textContent = t.status === 'paused' || t.status === 'error' ? 'Tiếp tục' : 'Tạm dừng';
+    $('pause').textContent = t.status === 'paused' || t.status === 'error' ? T('Tiếp tục') : T('Tạm dừng');
     if (done) { onDone(); }
   }
 
@@ -51,7 +52,7 @@
   }
 
   async function init() {
-    if (!api) { document.body.textContent = 'Thiếu cầu nối với ứng dụng (preload).'; return; }
+    if (!api) { document.body.textContent = T('Thiếu cầu nối với ứng dụng (preload).'); return; }
     const s = await api.getSettings().catch(() => ({}));
     $('auto').checked = s.progressAutoClose !== false;
     onErr = s.progressOnError || 'ask';
