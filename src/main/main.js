@@ -276,10 +276,17 @@ function openConfirm(id, { replaced = false } = {}) {
 }
 
 /** IDM-style small window that follows one download. Closing it only hides it; the download keeps going. */
+/** Pops the window above every other app for a few seconds so the new download is noticed, then lets other windows cover it. */
+function popOnTop(win) {
+  if (!settings.progressFloat || win.isDestroyed()) { return; }
+  win.setAlwaysOnTop(true, 'floating');
+  setTimeout(() => { if (!win.isDestroyed()) { win.setAlwaysOnTop(false); } }, 6000);
+}
+
 function openProgress(id) {
   if (!settings.progressWindow || !manager.get(id)) { return; }
   const existing = progressByTask.get(id);
-  if (existing && !existing.isDestroyed()) { existing.setAlwaysOnTop(!!settings.progressFloat, 'floating'); existing.show(); existing.focus(); return; }
+  if (existing && !existing.isDestroyed()) { popOnTop(existing); existing.show(); existing.focus(); return; }
   const n = progressByTask.size % 6;
   const win = new BrowserWindow(baseOptions({
     width: 440, height: 210, useContentSize: true, resizable: false, minimizable: true, maximizable: false,
@@ -293,8 +300,8 @@ function openProgress(id) {
   win.loadFile(path.join(RENDERER, 'progress.html'), pageOpts()).catch(() => { if (!win.isDestroyed()) { win.close(); } });
   win.once('ready-to-show', () => {
     if (n) { const [x, y] = win.getPosition(); win.setPosition(x + n * 28, y + n * 28); }
-    // Floating: stays above other apps without stealing keyboard focus. Quiet: a normal window that can sit behind others.
-    if (settings.progressFloat) { win.setAlwaysOnTop(true, 'floating'); }
+    // Pop-up on: shows above other apps for a few seconds without stealing keyboard focus. Off: a normal window, no pop.
+    popOnTop(win);
     win.showInactive();
   });
   win.on('closed', () => { progressWins.delete(wcId); if (progressByTask.get(id) === win) { progressByTask.delete(id); } });
