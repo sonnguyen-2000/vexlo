@@ -5,7 +5,7 @@ const crypto = require('crypto');
 const { EventEmitter } = require('events');
 const { Download, probe } = require('./download');
 const { SegmentedDownload } = require('./segmented');
-const { SpeedLimiter } = require('./limiter');
+const { SpeedLimiter, TaskLimiter } = require('./limiter');
 const { uniquePath, atomicWriteJson, pickFilename, sanitizeFilename } = require('./util');
 
 function detectKind(url, hint) {
@@ -82,7 +82,8 @@ class DownloadManager extends EventEmitter {
 
   _makeDl(state) {
     const resolvePath = (dir, name) => uniquePath(dir, name, this._reservedPaths(state.id));
-    const deps = { limiter: this.limiter, ffmpegPath: this.ffmpegPath, resolvePath };
+    const limiter = new TaskLimiter(this.limiter, () => state.limitKB || 0);
+    const deps = { limiter, ffmpegPath: this.ffmpegPath, resolvePath };
     return state.kind === 'hls' || state.kind === 'dash' ? new SegmentedDownload(state, deps) : new Download(state, deps);
   }
 
@@ -105,7 +106,7 @@ class DownloadManager extends EventEmitter {
       size: s.size, downloaded: s.downloaded, speed: p.speed, eta: p.eta, connections: p.connections,
       error: s.error, createdAt: s.createdAt, completedAt: s.completedAt, resumable: s.resumable,
       segDone: s.segDone || 0, segTotal: s.segTotal || 0, phase: p.phase || '', meta: s.meta || {},
-      pending: !!s.pending, mime: s.mime || '', quality: s.quality || 'best', connectionsMax: s.connections,
+      pending: !!s.pending, mime: s.mime || '', quality: s.quality || 'best', connectionsMax: s.connections, limitKB: s.limitKB || 0,
     };
   }
 
@@ -129,6 +130,7 @@ class DownloadManager extends EventEmitter {
     const state = kind === 'file' ? Download.create(base) : SegmentedDownload.create({ ...base, kind, quality: opts.quality });
     state.kind = kind;
     if (opts.pending) { state.pending = true; }
+    if (Number(opts.limitKB) > 0) { state.limitKB = Math.round(Number(opts.limitKB)); }
     this._register(state);
     this.emit('added', this.snapshot(this.tasks.get(state.id)));
     if (opts.start === false) { state.status = 'paused'; this.emit('update', this.snapshot(this.tasks.get(state.id))); }
@@ -257,6 +259,21 @@ class DownloadManager extends EventEmitter {
 
   pauseAll() { return Promise.all([...this.tasks.keys()].map((id) => this.pause(id))); }
   resumeAll() { for (const id of this.tasks.keys()) { this.resume(id); } }
+
+  /** Cap one download's own speed (KB/s, 0 = no cap). Takes effect at once, also while it is downloading. */
+  setTaskLimit(ids, kb) {
+    const v = Math.max(0, Math.min(10 * 1024 * 1024, Math.round(Number(kb) || 0)));
+    let n = 0;
+    for (const id of Array.isArray(ids) ? ids : [ids]) {
+      const t = this.tasks.get(id);
+      if (!t) { continue; }
+      t.state.limitKB = v;
+      this.emit('update', this.snapshot(t));
+      n++;
+    }
+    this._scheduleSave();
+    return n;
+  }
 
   setSpeedLimit(bytesPerSec) { this.limiter.setLimit(bytesPerSec); }
   setMaxConcurrent(n) { this.maxConcurrent = Math.max(1, Number(n) || 1); this._pump(); }

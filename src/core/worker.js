@@ -11,7 +11,7 @@ const post = (m) => { if (parentPort) { parentPort.postMessage(m); } else if (pr
 const listen = (fn) => { if (parentPort) { parentPort.on('message', (e) => fn(e.data)); } else { process.on('message', fn); } };
 
 let manager = null;
-const CALLS = new Set(['add', 'pause', 'resume', 'remove', 'probeInfo', 'update', 'confirm', 'pauseAll', 'resumeAll', 'prioritize', 'setSpeedLimit', 'setMaxConcurrent', 'shutdown']);
+const CALLS = new Set(['add', 'pause', 'resume', 'remove', 'probeInfo', 'update', 'confirm', 'pauseAll', 'resumeAll', 'prioritize', 'setTaskLimit', 'setSpeedLimit', 'setMaxConcurrent', 'shutdown']);
 
 function init(opts) {
   manager = new DownloadManager(opts);

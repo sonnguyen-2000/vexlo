@@ -117,6 +117,15 @@
 </div>
 
 <!-- Settings -->
+<div class="overlay" id="mLim">
+  <div class="modal narrow" role="dialog" aria-label="Giới hạn tốc độ tệp này">
+    <header>Giới hạn tốc độ tệp này <button class="x" data-close><svg class="ic"><use href="#i-x"/></svg></button></header>
+    <div class="body">
+      <div class="field"><label for="lLimit">Tốc độ tối đa (KB/s)</label><input id="lLimit" type="number" min="0" step="100"><div class="hint" id="lHint">Chỉ áp dụng cho tệp đã chọn, đổi được cả khi đang tải. Vẫn nằm trong giới hạn chung của Cài đặt.</div></div>
+    </div>
+    <footer><button class="btn" data-close>Hủy</button><button class="btn" id="lClear">Bỏ giới hạn</button><button class="btn pri" id="lOk">Áp dụng</button></footer>
+  </div>
+</div>
 <div class="overlay" id="mSet">
   <div class="modal" role="dialog" aria-label="Tùy chọn">
     <header>Tùy chọn <button class="x" data-close><svg class="ic"><use href="#i-x"/></svg></button></header>

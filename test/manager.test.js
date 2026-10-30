@@ -253,3 +253,47 @@ test('queue: "download first" jumps a waiting item ahead, "move to end" sends it
   for (const id of ids) { await waitStatus(m, id, 'done', 120000); }
   assert.deepEqual(order, [waiting[3], waiting[1], waiting[2], waiting[0]]);
 });
+
+test('per-file limit: TaskLimiter caps one file, 0 lifts it, and it follows the value live', async () => {
+  const { SpeedLimiter, TaskLimiter } = require('../src/core/limiter');
+  let kb = 200;
+  const lim = new TaskLimiter(new SpeedLimiter(0), () => kb);
+  let t0 = Date.now();
+  for (let i = 0; i < 4; i++) { await lim.wait(100 * 1024); } // 400 KB at 200 KB/s with a 1 s burst => about 1 s
+  assert.ok(Date.now() - t0 >= 800, 'capped, took ' + (Date.now() - t0));
+  kb = 0;
+  t0 = Date.now();
+  for (let i = 0; i < 20; i++) { await lim.wait(100 * 1024); }
+  assert.ok(Date.now() - t0 < 200, 'uncapped must not wait');
+  // the shared cap still applies on top of an unlimited file
+  const shared = new TaskLimiter(new SpeedLimiter(200 * 1024), () => 0);
+  t0 = Date.now();
+  for (let i = 0; i < 4; i++) { await shared.wait(100 * 1024); }
+  assert.ok(Date.now() - t0 >= 800, 'shared cap applies');
+});
+
+test('per-file limit: setTaskLimit is stored on the task, shown in the snapshot and kept after reload', async () => {
+  const m = mkMgr('tlim', { maxConcurrent: 1 });
+  const a = m.add({ url: base + '/attach', filename: 'l0.bin', start: false });
+  assert.equal(m.setTaskLimit([a, 'nope'], 300), 1);
+  assert.equal(m.list().find((x) => x.id === a).limitKB, 300);
+  m.saveNow();
+  const saved = JSON.parse(fs.readFileSync(m.file, 'utf8'));
+  assert.equal(saved.find((x) => x.id === a).limitKB, 300);
+  m.setTaskLimit(a, 0);
+  assert.equal(m.list().find((x) => x.id === a).limitKB, 0);
+  assert.equal(m.add({ url: base + '/attach', filename: 'l1.bin', start: false, limitKB: 120 }) && m.list().some((x) => x.limitKB === 120), true);
+});
+
+test('per-file limit: a limited download through the manager is throttled while an unlimited one is not', async () => {
+  const m = mkMgr('tlim2', { maxConcurrent: 2 });
+  const slow = m.add({ url: base + '/big.bin', filename: 'slow.bin', limitKB: 2048 });
+  const fast = m.add({ url: base + '/big.bin', filename: 'fast.bin' });
+  const t0 = Date.now();
+  let fastAt = 0;
+  await waitStatus(m, fast, 'done', 30000); fastAt = Date.now() - t0;
+  await waitStatus(m, slow, 'done', 30000);
+  const slowAt = Date.now() - t0;
+  assert.ok(slowAt >= 2500, `limited file finished too fast: ${slowAt} ms`);
+  assert.ok(fastAt < slowAt, `unlimited ${fastAt} ms vs limited ${slowAt} ms`);
+});

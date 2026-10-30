@@ -129,6 +129,7 @@ kbd{padding:1px 6px;border:1px solid var(--line);border-bottom-width:2px;border-
 .overlay{position:fixed;inset:0;z-index:50;display:none;align-items:center;justify-content:center;background:rgba(10,14,18,.45);backdrop-filter:blur(2px)}
 .overlay.show{display:flex}
 .modal{width:min(560px,94vw);max-height:92vh;display:flex;flex-direction:column;border-radius:var(--radius);background:var(--panel);box-shadow:var(--shadow);animation:pop .14s ease-out}
+.modal.narrow{width:min(420px,94vw)}
 @keyframes pop{from{opacity:0;transform:translateY(8px) scale(.985)}to{opacity:1;transform:none}}
 .modal header{display:flex;align-items:center;padding:15px 18px;border-bottom:1px solid var(--line);font-size:15px;font-weight:700}
 .modal header .x{margin-left:auto;border:0;background:transparent;cursor:pointer;color:var(--mut);padding:4px;border-radius:6px}

@@ -206,7 +206,7 @@
     const nm = t.filename || decodeName(t.url);
     if (name.textContent !== nm) { name.textContent = nm; name.title = t.url; }
     const site = hostOf((t.meta && t.meta.page) || t.url);
-    tr.querySelector('.fname small').textContent = site + (t.kind !== 'file' ? '  ·  ' + (t.kind === 'hls' ? 'HLS' : 'DASH') : '');
+    tr.querySelector('.fname small').textContent = site + (t.kind !== 'file' ? '  ·  ' + (t.kind === 'hls' ? 'HLS' : 'DASH') : '') + (t.limitKB ? '  ·  ' + T('Giới hạn {v}/s', { v: fmtSize(t.limitKB * 1024) }) : '');
     const p = percent(t);
     tr.querySelector('.prog i').style.width = p.toFixed(1) + '%';
     tr.querySelector('.prog em').textContent = t.size || t.segTotal || t.status === 'done' ? Math.floor(p) + '%' : '';
@@ -427,6 +427,7 @@
       one && one.status === 'done' && [T('Mở tệp'), 'i-open', () => openFile(one.id)],
       one && [T('Mở thư mục chứa tệp'), 'i-folder', () => bridge.showInFolder(one.id)],
       canRes && [T('Tiếp tục'), 'i-play', () => bridge.resume(sel.map((t) => t.id))],
+      [T('Giới hạn tốc độ tệp này…'), 'i-pause', () => openLimit(sel)],
       sel.some((t) => t.status === 'queued') && [T('Ưu tiên tải trước'), 'i-play', () => bridge.prioritize(sel.map((t) => t.id), 'top')],
       sel.some((t) => t.status === 'queued') && [T('Cho xuống cuối hàng đợi'), 'i-pause', () => bridge.prioritize(sel.map((t) => t.id), 'bottom')],
       canPause && [T('Tạm dừng'), 'i-pause', () => bridge.pause(sel.map((t) => t.id))],
@@ -464,6 +465,24 @@
   window.addEventListener('blur', hideMenu);
 
   // ---------------------------------------------------------------- add dialog
+
+  let limIds = [];
+  function openLimit(sel) {
+    limIds = sel.map((t) => t.id);
+    const cur = sel.length === 1 ? sel[0].limitKB || 0 : 0;
+    $('lLimit').value = cur;
+    openModal('mLim');
+    $('lLimit').focus();
+    $('lLimit').select();
+  }
+  async function applyLimit(kb) {
+    await bridge.taskLimit(limIds, kb);
+    closeModals();
+    toast(kb ? T('Đã giới hạn {v}/s cho tệp đã chọn', { v: fmtSize(kb * 1024) }) : T('Đã bỏ giới hạn cho tệp đã chọn'));
+  }
+  $('lOk').addEventListener('click', () => applyLimit(Math.max(0, Math.round(Number($('lLimit').value) || 0))));
+  $('lClear').addEventListener('click', () => applyLimit(0));
+  $('lLimit').addEventListener('keydown', (e) => { if (e.key === 'Enter') { $('lOk').click(); } });
 
   function openModal(id) { $(id).classList.add('show'); }
   function closeModals() { document.querySelectorAll('.overlay.show').forEach((o) => o.classList.remove('show')); }

@@ -39,6 +39,25 @@ class SpeedLimiter {
   }
 }
 
+/**
+ * A download's own limiter: applies the per-file limit (read live from `getKB()`, 0 = none) and then the shared one,
+ * so a file never exceeds its own cap and all files together never exceed the global cap.
+ */
+class TaskLimiter {
+  constructor(shared, getKB) {
+    this.shared = shared;
+    this.getKB = getKB;
+    this.own = new SpeedLimiter(0);
+  }
+
+  async wait(n) {
+    const bps = Math.max(0, Number(this.getKB()) || 0) * 1024;
+    if (bps !== this.own.limit) { this.own.setLimit(bps); }
+    if (bps) { await this.own.wait(n); }
+    await this.shared.wait(n);
+  }
+}
+
 /** Moving-window speed meter (bytes/second over the last `windowMs`). */
 class SpeedMeter {
   constructor(windowMs = 3000) {
@@ -70,4 +89,4 @@ class SpeedMeter {
   reset() { this.samples = []; }
 }
 
-module.exports = { SpeedLimiter, SpeedMeter };
+module.exports = { SpeedLimiter, SpeedMeter, TaskLimiter };

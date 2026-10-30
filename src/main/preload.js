@@ -19,6 +19,7 @@ contextBridge.exposeInMainWorld('vexlo', {
   copyLink: call('dl:copyLink'),
   hashFile: call('dl:hash'),
   prioritize: call('dl:prioritize'),
+  taskLimit: call('dl:taskLimit'),
   openPage: call('dl:openPage'),
   refreshLink: call('dl:refresh'),
   getSettings: call('settings:get'),
