@@ -105,7 +105,19 @@ function atomicWriteJson(file, data) {
   fs.renameSync(tmp, file);
 }
 
+const DL_EXT = /\.(zip|rar|7z|tar|gz|bz2|xz|iso|exe|msi|dmg|apk|deb|rpm|pkg|pdf|epub|docx?|xlsx?|pptx?|mp4|mkv|avi|mov|webm|flv|m3u8|mpd|mp3|flac|wav|m4a|aac|ogg|jpg|jpeg|png|gif|webp|torrent)$/i;
+
+/** Text on the clipboard that is exactly one http(s) link to a file (not just any web page). Returns the URL or ''. */
+function downloadLinkIn(text) {
+  const t = String(text || '').trim();
+  if (!t || t.length > 2048 || /\s/.test(t)) { return ''; }
+  let u;
+  try { u = new URL(t); } catch { return ''; }
+  if (u.protocol !== 'http:' && u.protocol !== 'https:') { return ''; }
+  return DL_EXT.test(u.pathname) ? t : '';
+}
+
 module.exports = {
-  sanitizeFilename, filenameFromContentDisposition, filenameFromUrl, extFromMime,
+  downloadLinkIn, sanitizeFilename, filenameFromContentDisposition, filenameFromUrl, extFromMime,
   pickFilename, uniquePath, sleep, atomicWriteJson,
 };

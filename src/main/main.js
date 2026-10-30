@@ -10,7 +10,7 @@ const { EngineClient } = require('../core/engine-client');
 const { createApi } = require('../core/api');
 const { folderFor } = require('../core/category');
 const { findDuplicate } = require('../core/dupes');
-const { uniquePath } = require('../core/util');
+const { uniquePath, downloadLinkIn } = require('../core/util');
 const { dueActions } = require('../core/schedule');
 const { execFile } = require('child_process');
 const I18N = require('../renderer/i18n');
@@ -26,7 +26,7 @@ const DEFAULTS = {
   closeToTray: true, startWithOS: false, notify: true, port: 6877, token: '', deleteMode: 'ask',
   progressWindow: true, progressFloat: true, progressAutoClose: true, progressOnError: 'ask',
   scheduleEnabled: false, scheduleStart: '01:00', scheduleStop: '', scheduleDays: [0, 1, 2, 3, 4, 5, 6],
-  autoUpdate: true, language: 'auto',
+  autoUpdate: true, language: 'auto', clipboardWatch: false,
 };
 
 let settings = { ...DEFAULTS };
@@ -66,6 +66,7 @@ function clampSettings(s) {
     scheduleStop: /^([01]?\d|2[0-3]):[0-5]\d$/.test(String(s.scheduleStop || '')) ? String(s.scheduleStop) : '',
     scheduleDays: Array.isArray(s.scheduleDays) ? [...new Set(s.scheduleDays.map(Number).filter((d) => Number.isInteger(d) && d >= 0 && d <= 6))] : DEFAULTS.scheduleDays,
     autoUpdate: s.autoUpdate !== false,
+    clipboardWatch: !!s.clipboardWatch,
     deleteMode: ['ask', 'list', 'files'].includes(s.deleteMode) ? s.deleteMode : 'ask',
     port: n(s.port, 1024, 65535, DEFAULTS.port),
     token: typeof s.token === 'string' && s.token ? s.token : crypto.randomBytes(12).toString('hex'),
@@ -112,6 +113,28 @@ function applySettings(prev) {
   manager.setSpeedLimit(settings.speedLimitKB * 1024);
   try { app.setLoginItemSettings({ openAtLogin: settings.startWithOS, args: ['--hidden'] }); } catch { /* unsupported platform */ }
   if (!prev || prev.port !== settings.port || prev.token !== settings.token) { startApi(); }
+  setClipboardWatch(settings.clipboardWatch);
+}
+
+// ---- optional: offer to download when a file link is copied (off by default, polls only while enabled)
+let clipTimer = null;
+let clipLast = '';
+function setClipboardWatch(on) {
+  if (!on) { if (clipTimer) { clearInterval(clipTimer); clipTimer = null; } return; }
+  if (clipTimer) { return; }
+  try { clipLast = clipboard.readText(); } catch { clipLast = ''; } // what is already there is not offered
+  clipTimer = setInterval(() => {
+    let text = '';
+    try { text = clipboard.readText(); } catch { return; }
+    if (text === clipLast) { return; }
+    clipLast = text;
+    const url = downloadLinkIn(text);
+    if (!url || !manager || !Notification.isSupported()) { return; }
+    if (manager.list().some((t) => t.url === url && t.status !== 'error')) { return; }
+    const n = new Notification({ title: T('Vexlo: phát hiện link tải'), body: T('{u}\nBấm để tải bằng Vexlo', { u: url.length > 90 ? url.slice(0, 87) + '...' : url }), silent: true });
+    n.on('click', () => { if (manager) { handleExternalAdd([{ url }]); } });
+    n.show();
+  }, 1500);
 }
 
 
@@ -422,6 +445,24 @@ function registerIpc() {
     // The marker in the address tells the extension this tab is a refresh: it plays the video by itself, sends the new link
     // and closes the tab. (Servers ignore the part after #.)
     shell.openExternal(stripHash(page) + '#vexlo-refresh');
+    return true;
+  });
+  ipcMain.handle('dl:hash', async (e, id) => {
+    const t = manager.get(id);
+    const file = t && t.state.path;
+    if (!file || !fs.existsSync(file)) { return false; }
+    let expected = '';
+    try { const c = clipboard.readText().trim().toLowerCase(); if (/^[0-9a-f]{64}$/.test(c)) { expected = c; } } catch { /* no clipboard */ }
+    const hex = await new Promise((resolve) => {
+      const h = crypto.createHash('sha256');
+      fs.createReadStream(file).on('data', (d) => h.update(d)).on('error', () => resolve('')).on('end', () => resolve(h.digest('hex')));
+    });
+    if (!hex) { return false; }
+    clipboard.writeText(hex);
+    const win = BrowserWindow.fromWebContents(e.sender) || undefined;
+    const verdict = !expected ? T('Mã đã được chép vào clipboard. Muốn so khớp, hãy sao chép mã gốc của nhà phát hành rồi chọn lại mục này.')
+      : expected === hex ? T('Khớp với mã trong clipboard: tệp nguyên vẹn.') : T('KHÔNG khớp với mã trong clipboard: tệp có thể bị lỗi hoặc bị thay đổi.');
+    await dialog.showMessageBox(win, { type: expected && expected !== hex ? 'warning' : 'info', title: 'SHA-256', message: path.basename(file), detail: `${hex}\n\n${verdict}`, buttons: [T('Đóng')] });
     return true;
   });
   ipcMain.handle('dl:copyLink', (_e, id) => { const t = manager.get(id); if (t) { clipboard.writeText(t.state.url); } return true; });

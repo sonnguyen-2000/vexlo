@@ -428,6 +428,7 @@
       one && [T('Mở thư mục chứa tệp'), 'i-folder', () => bridge.showInFolder(one.id)],
       canRes && [T('Tiếp tục'), 'i-play', () => bridge.resume(sel.map((t) => t.id))],
       canPause && [T('Tạm dừng'), 'i-pause', () => bridge.pause(sel.map((t) => t.id))],
+      one && one.status === 'done' && [T('Tính mã SHA-256 (kiểm tra tệp)'), 'i-open', async () => { toast(T('Đang tính mã SHA-256...')); if (!(await bridge.hashFile(one.id))) { toast(T('Không đọc được tệp'), true); } }],
       one && [T('Sao chép link'), 'i-copy', async () => { await bridge.copyLink(one.id); toast(T('Đã sao chép link')); }],
       one && one.status === 'error' && one.meta && one.meta.page && [T('Làm mới link'), 'i-play', async () => {
         toast(await bridge.refreshLink(one.id) ? T('Đang lấy link mới: trang gốc mở trong trình duyệt, Vexlo tự phát video, lấy link rồi tự tải lại. Nếu video không tự chạy, bạn bấm phát.') : T('Không có địa chỉ trang gốc'), false);
@@ -519,6 +520,7 @@
     $('sFloat').checked = settings.progressFloat !== false;
     $('sOnErr').value = settings.progressOnError || 'ask';
     $('sUpd').checked = settings.autoUpdate !== false;
+    $('sClip').checked = !!settings.clipboardWatch;
     $('sSchOn').checked = !!settings.scheduleEnabled;
     $('sSchStart').value = settings.scheduleStart || '01:00';
     $('sSchStop').value = settings.scheduleStop || '';
@@ -584,7 +586,7 @@
   });
   $('sSave').addEventListener('click', async () => {
     settings = await bridge.setSettings({
-      downloadDir: $('sDir').value.trim(), categorize: $('sCat').checked, confirm: $('sConfirm').checked, notify: $('sNotify').checked, language: $('sLang').value, progressWindow: $('sProg').checked, progressFloat: $('sFloat').checked, progressOnError: $('sOnErr').value, autoUpdate: $('sUpd').checked,
+      downloadDir: $('sDir').value.trim(), categorize: $('sCat').checked, confirm: $('sConfirm').checked, notify: $('sNotify').checked, language: $('sLang').value, progressWindow: $('sProg').checked, progressFloat: $('sFloat').checked, progressOnError: $('sOnErr').value, autoUpdate: $('sUpd').checked, clipboardWatch: $('sClip').checked,
       scheduleEnabled: $('sSchOn').checked, scheduleStart: $('sSchStart').value, scheduleStop: $('sSchStop').value,
       scheduleDays: [0, 1, 2, 3, 4, 5, 6].filter((d) => $('sDay' + d).checked), deleteMode: $('sDelete').value,
       closeToTray: $('sTray').checked, startWithOS: $('sStart').checked, connections: Number($('sConn').value),

@@ -28,3 +28,14 @@ test('native host: config works, launch without an app path fails cleanly', asyn
   const l = await ask('launch');
   assert.equal(l.ok, false);
 });
+
+test('clipboard: only a single http(s) link to a file is offered', () => {
+  const { downloadLinkIn } = require('../src/core/util');
+  assert.equal(downloadLinkIn('https://a.com/x/file.zip'), 'https://a.com/x/file.zip');
+  assert.equal(downloadLinkIn('  http://a.com/v.MP4?token=1  '), 'http://a.com/v.MP4?token=1');
+  assert.equal(downloadLinkIn('https://a.com/page'), '');
+  assert.equal(downloadLinkIn('https://a.com/a.zip and more'), '');
+  assert.equal(downloadLinkIn('ftp://a.com/a.zip'), '');
+  assert.equal(downloadLinkIn('hello'), '');
+  assert.equal(downloadLinkIn(''), '');
+});
