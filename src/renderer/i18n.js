@@ -57,6 +57,7 @@
     'Tính mã SHA-256 (kiểm tra tệp)': 'Compute SHA-256 (verify file)', 'Đang tính mã SHA-256...': 'Computing SHA-256...', 'Không đọc được tệp': 'Could not read the file',
     'Mã đã được chép vào clipboard. Muốn so khớp, hãy sao chép mã gốc của nhà phát hành rồi chọn lại mục này.': 'The hash was copied to the clipboard. To compare, copy the publisher\'s hash first and choose this item again.',
     'Khớp với mã trong clipboard: tệp nguyên vẹn.': 'Matches the hash in the clipboard: the file is intact.', 'KHÔNG khớp với mã trong clipboard: tệp có thể bị lỗi hoặc bị thay đổi.': 'Does NOT match the hash in the clipboard: the file may be corrupt or altered.',
+    'Ưu tiên tải trước': 'Download first', 'Cho xuống cuối hàng đợi': 'Move to end of queue',
     'Vexlo: phát hiện link tải': 'Vexlo: download link found', '{u}\nBấm để tải bằng Vexlo': '{u}\nClick to download with Vexlo',
     'Lấy từ trang phát hành của dự án trên GitHub': 'Taken from the project releases page on GitHub', 'Chạy cùng Windows': 'Start with Windows',
     'Số kết nối mỗi tệp (1–32)': 'Connections per file (1–32)', '8 là mức cân bằng. Một số máy chủ chặn khi quá nhiều kết nối.': '8 is a good balance. Some servers block too many connections.',

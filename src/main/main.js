@@ -413,6 +413,7 @@ function registerIpc() {
   ipcMain.handle('dl:pause', (_e, v) => Promise.all(ids(v).map((id) => manager.pause(id))).then(() => true));
   ipcMain.handle('dl:resume', (_e, v) => { ids(v).forEach((id) => manager.resume(id)); return true; });
   ipcMain.handle('dl:remove', (_e, v, deleteFile) => Promise.all(ids(v).map((id) => manager.remove(id, { deleteFile: !!deleteFile }))).then(() => true));
+  ipcMain.handle('dl:prioritize', (_e, v, mode) => manager.prioritize(ids(v), mode === 'bottom' ? 'bottom' : 'top'));
   ipcMain.handle('dl:pauseAll', () => manager.pauseAll().then(() => true));
   ipcMain.handle('dl:resumeAll', () => { manager.resumeAll(); return true; });
   ipcMain.handle('dl:clearDone', async () => {

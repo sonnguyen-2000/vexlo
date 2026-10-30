@@ -427,6 +427,8 @@
       one && one.status === 'done' && [T('Mở tệp'), 'i-open', () => openFile(one.id)],
       one && [T('Mở thư mục chứa tệp'), 'i-folder', () => bridge.showInFolder(one.id)],
       canRes && [T('Tiếp tục'), 'i-play', () => bridge.resume(sel.map((t) => t.id))],
+      sel.some((t) => t.status === 'queued') && [T('Ưu tiên tải trước'), 'i-play', () => bridge.prioritize(sel.map((t) => t.id), 'top')],
+      sel.some((t) => t.status === 'queued') && [T('Cho xuống cuối hàng đợi'), 'i-pause', () => bridge.prioritize(sel.map((t) => t.id), 'bottom')],
       canPause && [T('Tạm dừng'), 'i-pause', () => bridge.pause(sel.map((t) => t.id))],
       one && one.status === 'done' && [T('Tính mã SHA-256 (kiểm tra tệp)'), 'i-open', async () => { toast(T('Đang tính mã SHA-256...')); if (!(await bridge.hashFile(one.id))) { toast(T('Không đọc được tệp'), true); } }],
       one && [T('Sao chép link'), 'i-copy', async () => { await bridge.copyLink(one.id); toast(T('Đã sao chép link')); }],

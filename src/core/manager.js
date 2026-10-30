@@ -144,12 +144,24 @@ class DownloadManager extends EventEmitter {
   }
 
   _pump() {
-    for (const { dl, state } of this.tasks.values()) {
+    if (this._runningCount() >= this.maxConcurrent) { return; }
+    // Waiting tasks start in priority order (see prioritize), ties keep the order they were added in.
+    const waiting = [...this.tasks.values()].filter((t) => t.state.status === 'queued')
+      .map((t, i) => ({ t, i })).sort((a, b) => ((b.t.priority || 0) - (a.t.priority || 0)) || (a.i - b.i));
+    for (const { t } of waiting) {
       if (this._runningCount() >= this.maxConcurrent) { break; }
-      if (state.status === 'queued') {
-        dl.start().catch((e) => this.emit('warn', e));
-      }
+      t.dl.start().catch((e) => this.emit('warn', e));
     }
+  }
+
+  /** Move waiting downloads to the front ('top') or the back ('bottom') of the queue. Returns how many were moved. */
+  prioritize(ids, mode) {
+    const list = (Array.isArray(ids) ? ids : [ids]).map((id) => this.tasks.get(id)).filter((t) => t && t.state.status === 'queued');
+    const all = [...this.tasks.values()].map((t) => t.priority || 0);
+    let p = mode === 'bottom' ? Math.min(0, ...all) - list.length : Math.max(0, ...all) + list.length;
+    for (const t of list) { t.priority = mode === 'bottom' ? p++ : p--; }
+    this._pump();
+    return list.length;
   }
 
   async pause(id) {

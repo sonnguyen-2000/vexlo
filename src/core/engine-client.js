@@ -127,6 +127,7 @@ class EngineClient extends EventEmitter {
   update(id, patch) { this._call('update', id, patch).catch(() => {}); }
   confirm(id, opts) { this._call('confirm', id, opts).catch(() => {}); }
   pauseAll() { return this._call('pauseAll'); }
+  prioritize(ids, mode) { return this._call('prioritize', ids, mode).catch(() => 0); }
   resumeAll() { this._call('resumeAll').catch(() => {}); }
 
   async shutdown() {

@@ -238,3 +238,18 @@ test('clearDone-style removal of finished items never touches the files', async 
   for (const t of m.list()) { if (t.status === 'done') { await m.remove(t.id); } }
   assert.ok(fs.existsSync(file));
 });
+
+test('queue: "download first" jumps a waiting item ahead, "move to end" sends it back', async () => {
+  const m = mkMgr('qprio', { maxConcurrent: 1, speedLimit: 64 * 1024 });
+  const ids = [0, 1, 2, 3, 4].map((i) => m.add({ url: base + '/attach', filename: `p${i}.bin` }));
+  const running = m.list().find((x) => x.status === 'downloading');
+  const waiting = ids.filter((id) => id !== running.id); // in the order they were added
+  assert.equal(waiting.length, 4);
+  assert.equal(m.prioritize([waiting[3]], 'top'), 1);
+  assert.equal(m.prioritize([waiting[0]], 'bottom'), 1);
+  assert.equal(m.prioritize([running.id], 'top'), 0, 'a running item is not queued, nothing to move');
+  const order = [];
+  m.on('update', (s) => { if (s.status === 'downloading' && s.id !== running.id && !order.includes(s.id)) { order.push(s.id); } });
+  for (const id of ids) { await waitStatus(m, id, 'done', 120000); }
+  assert.deepEqual(order, [waiting[3], waiting[1], waiting[2], waiting[0]]);
+});
