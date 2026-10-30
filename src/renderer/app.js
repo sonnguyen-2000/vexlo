@@ -534,6 +534,10 @@
     $('sConn').value = settings.connections;
     $('sMax').value = settings.maxConcurrent;
     $('sLimit').value = settings.speedLimitKB;
+    $('sLimWin').checked = !!settings.limitWindowEnabled;
+    $('sLimFrom').value = settings.limitWindowFrom || '08:00';
+    $('sLimTo').value = settings.limitWindowTo || '22:00';
+    $('sLimKB').value = settings.limitWindowKB;
     $('sPort').value = settings.port;
     $('sToken').textContent = settings.token || '';
     renderApiStatus();
@@ -592,7 +596,7 @@
       scheduleEnabled: $('sSchOn').checked, scheduleStart: $('sSchStart').value, scheduleStop: $('sSchStop').value,
       scheduleDays: [0, 1, 2, 3, 4, 5, 6].filter((d) => $('sDay' + d).checked), deleteMode: $('sDelete').value,
       closeToTray: $('sTray').checked, startWithOS: $('sStart').checked, connections: Number($('sConn').value),
-      maxConcurrent: Number($('sMax').value), speedLimitKB: Number($('sLimit').value), port: Number($('sPort').value),
+      maxConcurrent: Number($('sMax').value), speedLimitKB: Number($('sLimit').value), limitWindowEnabled: $('sLimWin').checked, limitWindowFrom: $('sLimFrom').value, limitWindowTo: $('sLimTo').value, limitWindowKB: Number($('sLimKB').value), port: Number($('sPort').value),
     });
     closeModals();
     toast(T('Đã lưu tùy chọn'));

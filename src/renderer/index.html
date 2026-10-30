@@ -151,6 +151,12 @@
           <div class="field"><label for="sMax">Số tệp tải cùng lúc (1–10)</label><input id="sMax" type="number" min="1" max="10"><div class="hint">Các tệp còn lại xếp hàng chờ, tải xong tệp nào thì tệp tiếp theo tự bắt đầu. Ít tệp cùng lúc thì mỗi tệp nhanh hơn.</div></div>
         </div>
         <div class="field"><label for="sLimit">Giới hạn tốc độ (KB/s, 0 = không giới hạn)</label><input id="sLimit" type="number" min="0" step="100"><div class="hint">Áp dụng cho tổng tốc độ của mọi tệp.</div></div>
+        <label class="chk"><input type="checkbox" id="sLimWin"><span>Giới hạn tốc độ riêng trong một khoảng giờ<small>Ví dụ ban ngày chỉ dùng 500 KB/s để còn mạng cho việc khác, ngoài khoảng giờ này thì dùng giới hạn ở trên. Khoảng giờ có thể qua nửa đêm.</small></span></label>
+        <div class="grid2">
+          <div class="field"><label for="sLimFrom">Từ</label><input id="sLimFrom" type="time"></div>
+          <div class="field"><label for="sLimTo">Đến</label><input id="sLimTo" type="time"></div>
+        </div>
+        <div class="field"><label for="sLimKB">Giới hạn trong khoảng giờ đó (KB/s, 0 = không giới hạn)</label><input id="sLimKB" type="number" min="0" step="100"></div>
       </div>
       <div class="pane" id="p-schedule">
         <label class="chk"><input type="checkbox" id="sSchOn"><span>Bật lịch tải<small>Đến giờ bắt đầu, mọi tệp đang tạm dừng (ví dụ chọn "Tải sau") sẽ tự tải. Đến giờ dừng, các tệp đang tải được tạm dừng.</small></span></label>

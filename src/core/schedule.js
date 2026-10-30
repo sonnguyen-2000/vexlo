@@ -33,4 +33,19 @@ function dueActions(now, sched, state, graceMin = 10) {
   return out;
 }
 
-module.exports = { dueActions, toMinutes };
+/**
+ * Speed limit (KB/s) that applies right now: inside the "limit window" (it may cross midnight) the window's limit
+ * is used, otherwise the normal one. 0 means no limit.
+ */
+function effectiveLimitKB(now, o) {
+  const base = Number(o.limit) || 0;
+  if (!o.windowEnabled) { return base; }
+  const from = toMinutes(o.windowFrom);
+  const to = toMinutes(o.windowTo);
+  if (from < 0 || to < 0 || from === to) { return base; }
+  const m = now.getHours() * 60 + now.getMinutes();
+  const inside = from < to ? (m >= from && m < to) : (m >= from || m < to);
+  return inside ? (Number(o.windowLimit) || 0) : base;
+}
+
+module.exports = { dueActions, toMinutes, effectiveLimitKB };

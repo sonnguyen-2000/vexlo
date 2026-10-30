@@ -11,7 +11,7 @@ const { createApi } = require('../core/api');
 const { folderFor } = require('../core/category');
 const { findDuplicate } = require('../core/dupes');
 const { uniquePath, downloadLinkIn } = require('../core/util');
-const { dueActions } = require('../core/schedule');
+const { dueActions, effectiveLimitKB } = require('../core/schedule');
 const { execFile } = require('child_process');
 const I18N = require('../renderer/i18n');
 
@@ -27,6 +27,7 @@ const DEFAULTS = {
   progressWindow: true, progressFloat: true, progressAutoClose: true, progressOnError: 'ask',
   scheduleEnabled: false, scheduleStart: '01:00', scheduleStop: '', scheduleDays: [0, 1, 2, 3, 4, 5, 6],
   autoUpdate: true, language: 'auto', clipboardWatch: false,
+  limitWindowEnabled: false, limitWindowFrom: '08:00', limitWindowTo: '22:00', limitWindowKB: 500,
 };
 
 let settings = { ...DEFAULTS };
@@ -67,6 +68,10 @@ function clampSettings(s) {
     scheduleDays: Array.isArray(s.scheduleDays) ? [...new Set(s.scheduleDays.map(Number).filter((d) => Number.isInteger(d) && d >= 0 && d <= 6))] : DEFAULTS.scheduleDays,
     autoUpdate: s.autoUpdate !== false,
     clipboardWatch: !!s.clipboardWatch,
+    limitWindowEnabled: !!s.limitWindowEnabled,
+    limitWindowFrom: /^([01]?\d|2[0-3]):[0-5]\d$/.test(String(s.limitWindowFrom || '')) ? String(s.limitWindowFrom) : DEFAULTS.limitWindowFrom,
+    limitWindowTo: /^([01]?\d|2[0-3]):[0-5]\d$/.test(String(s.limitWindowTo || '')) ? String(s.limitWindowTo) : DEFAULTS.limitWindowTo,
+    limitWindowKB: n(s.limitWindowKB, 0, 10 * 1024 * 1024, DEFAULTS.limitWindowKB),
     deleteMode: ['ask', 'list', 'files'].includes(s.deleteMode) ? s.deleteMode : 'ask',
     port: n(s.port, 1024, 65535, DEFAULTS.port),
     token: typeof s.token === 'string' && s.token ? s.token : crypto.randomBytes(12).toString('hex'),
@@ -106,11 +111,26 @@ function uiLang() {
 function T(key, vars) { I18N.setLang(uiLang()); return I18N.tr(key, vars); }
 const pageOpts = () => ({ query: { lang: uiLang() } });
 
+/** The speed limit in force now: the normal one, or the "limit during these hours" one while inside the window. */
+let appliedLimit = -1;
+function currentLimitKB() {
+  return effectiveLimitKB(new Date(), {
+    limit: settings.speedLimitKB, windowEnabled: settings.limitWindowEnabled, windowFrom: settings.limitWindowFrom,
+    windowTo: settings.limitWindowTo, windowLimit: settings.limitWindowKB,
+  });
+}
+function applyLimit() {
+  if (!manager) { return; }
+  const kb = currentLimitKB();
+  if (kb !== appliedLimit) { appliedLimit = kb; manager.setSpeedLimit(kb * 1024); }
+}
+
 function applySettings(prev) {
   manager.downloadDir = settings.downloadDir;
   manager.connections = settings.connections;
   manager.setMaxConcurrent(settings.maxConcurrent);
-  manager.setSpeedLimit(settings.speedLimitKB * 1024);
+  appliedLimit = -1;
+  applyLimit();
   try { app.setLoginItemSettings({ openAtLogin: settings.startWithOS, args: ['--hidden'] }); } catch { /* unsupported platform */ }
   if (!prev || prev.port !== settings.port || prev.token !== settings.token) { startApi(); }
   setClipboardWatch(settings.clipboardWatch);
@@ -571,6 +591,7 @@ function registerIpc() {
 const schedState = {};
 function runSchedule() {
   if (!manager) { return; }
+  applyLimit();
   const acts = dueActions(new Date(), {
     enabled: settings.scheduleEnabled, start: settings.scheduleStart, stop: settings.scheduleStop, days: settings.scheduleDays,
   }, schedState);
