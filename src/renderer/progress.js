@@ -66,7 +66,7 @@
     const doRefresh = async () => {
       if (!task) { return; }
       const ok = await api.refreshLink(task.id).catch(() => false);
-      $('refMsg').textContent = ok ? T('Đã mở trang gốc. Hãy phát video, Vexlo sẽ tự lấy link mới.') : T('Không có địa chỉ trang gốc');
+      $('refMsg').textContent = ok ? T('Đang lấy link mới: trang gốc mở trong trình duyệt, Vexlo tự phát video, lấy link rồi tự tải lại. Nếu video không tự chạy, bạn bấm phát.') : T('Không có địa chỉ trang gốc');
     };
     $('refresh').addEventListener('click', doRefresh);
     $('errRefresh').addEventListener('click', doRefresh);

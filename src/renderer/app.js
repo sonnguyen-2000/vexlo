@@ -430,7 +430,7 @@
       canPause && [T('Tạm dừng'), 'i-pause', () => bridge.pause(sel.map((t) => t.id))],
       one && [T('Sao chép link'), 'i-copy', async () => { await bridge.copyLink(one.id); toast(T('Đã sao chép link')); }],
       one && one.status === 'error' && one.meta && one.meta.page && [T('Làm mới link'), 'i-play', async () => {
-        toast(await bridge.refreshLink(one.id) ? T('Đã mở trang gốc. Hãy phát video, Vexlo sẽ tự lấy link mới.') : T('Không có địa chỉ trang gốc'), false);
+        toast(await bridge.refreshLink(one.id) ? T('Đang lấy link mới: trang gốc mở trong trình duyệt, Vexlo tự phát video, lấy link rồi tự tải lại. Nếu video không tự chạy, bạn bấm phát.') : T('Không có địa chỉ trang gốc'), false);
       }],
       one && one.meta && one.meta.page && [T('Mở trang web gốc'), 'i-open', async () => {
         if (!(await bridge.openPage(one.id))) { toast(T('Không có địa chỉ trang gốc'), true); }

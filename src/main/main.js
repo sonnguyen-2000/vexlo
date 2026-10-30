@@ -419,7 +419,9 @@ function registerIpc() {
     const page = t && t.state.meta && t.state.meta.page;
     if (!t || t.state.status !== 'error' || !page || !/^https?:\/\//i.test(page)) { return false; }
     refreshWanted.set(id, { page, kind: t.state.kind, at: Date.now() });
-    shell.openExternal(page); // the browser extension sees the page capture its media again and sends the new link by itself
+    // The marker in the address tells the extension this tab is a refresh: it plays the video by itself, sends the new link
+    // and closes the tab. (Servers ignore the part after #.)
+    shell.openExternal(stripHash(page) + '#vexlo-refresh');
     return true;
   });
   ipcMain.handle('dl:copyLink', (_e, id) => { const t = manager.get(id); if (t) { clipboard.writeText(t.state.url); } return true; });

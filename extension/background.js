@@ -228,6 +228,9 @@ async function maybeAutoRefresh(tabId, item) {
     refreshCache = { at: 0, pages: [] }; // ask the app again next time: this request is now taken
     if (item.kind === 'hls') { await new Promise((ok) => setTimeout(ok, 1500)); } // let the playlist inspection finish first
     await sendMediaItem(tabId, item.id);
+    // A tab opened by the app's "Refresh link" has done its job: close it after a moment.
+    const tab = await browser.tabs.get(tabId).catch(() => null);
+    if (tab && /#vexlo-refresh/.test(tab.url || '') && browser.tabs.remove) { setTimeout(() => { browser.tabs.remove(tabId).catch(() => {}); }, 1500); }
   } catch { /* no app / not paired: the normal button still works */ }
 }
 
@@ -431,6 +434,7 @@ browser.runtime.onMessage.addListener((msg, sender) => {
   const tabId = msg.tabId ?? sender.tab?.id;
   switch (msg.type) {
     case 'getSettings': return Promise.resolve({ floating: settings.floating && settings.enabled });
+    case 'refreshTab': return browser.tabs.get(tabId).then((tb) => /#vexlo-refresh/.test(tb.url || ''), () => false); // is this tab one opened by "Refresh link"?
     case 'status': return appStatus(true);
     case 'mediaCount': return (globalThis.SGReady || Promise.resolve()).then(() => tabMedia.get(tabId)?.size || 0); // how many items THIS tab has captured
     case 'getMedia': return (globalThis.SGReady || Promise.resolve()).then(() => listFor(tabId));

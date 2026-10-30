@@ -219,6 +219,18 @@
   window.addEventListener('resize', () => { if (current) { placeButton(current); } }, { passive: true });
   document.addEventListener('click', (e) => { if (panelOpen && e.target !== host) { closePanel(); } }, true);
 
+  // Tabs opened by the app's "Refresh link": start the video by itself (muted, so browsers allow it) so the new link is captured.
+  api.runtime.sendMessage({ type: 'refreshTab' }).then((yes) => {
+    if (!yes) { return; }
+    let tries = 0;
+    const timer = setInterval(() => {
+      if (++tries > 40) { clearInterval(timer); return; } // about 20 seconds
+      for (const v of document.querySelectorAll('video')) {
+        if (v.paused) { v.muted = true; const p = v.play(); if (p && p.catch) { p.catch(() => {}); } }
+      }
+    }, 500);
+  }).catch(() => {});
+
   // The background page asks this frame to read a playlist with the page's own cookies/origin when its own request is refused.
   api.runtime.onMessage.addListener((msg) => {
     if (!msg || msg.type !== 'fetchText' || !/^https?:\/\//i.test(msg.url || '')) { return undefined; }

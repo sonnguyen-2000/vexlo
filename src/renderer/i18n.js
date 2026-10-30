@@ -96,7 +96,7 @@
     'Đang cài bản {v}. Vexlo sẽ tự mở lại sau khoảng một phút, bạn không cần làm gì.': 'Installing version {v}. Vexlo will reopen by itself in about a minute, you do not need to do anything.',
     'Xem điểm mới của bản này': 'See what is new in this version', 'Xuất nhật ký lỗi': 'Export error log',
     'Chưa có trang phát hành cho bản này.': 'There is no release page for this version yet.', 'Đã lưu nhật ký: {f}': 'Log saved: {f}',
-    'Làm mới link': 'Refresh link', 'Đã mở trang gốc. Hãy phát video, Vexlo sẽ tự lấy link mới.': 'The original page was opened. Play the video and Vexlo will pick up the new link by itself.',
+    'Làm mới link': 'Refresh link', 'Đang lấy link mới: trang gốc mở trong trình duyệt, Vexlo tự phát video, lấy link rồi tự tải lại. Nếu video không tự chạy, bạn bấm phát.': 'Getting a fresh link: the page opens in your browser, Vexlo plays the video, takes the link and restarts the download. If the video does not start by itself, press play.',
     // ---- progress window
     'Đã tải': 'Downloaded', 'Tải bị lỗi.': 'Download failed.', 'Lần sau khi tải lỗi:': 'Next time a download fails:', 'Giữ cửa sổ': 'Keep window', 'Tự đóng khi xong': 'Close when finished',
     'Hủy tải': 'Cancel download', 'Ẩn': 'Hide', 'Mở thư mục': 'Open folder', 'Đã tải xong': 'Download complete', 'Tất cả tệp đã tải xong.': 'All files have finished downloading.', 'Thực hiện ngay': 'Do it now',

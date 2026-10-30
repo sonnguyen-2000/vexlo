@@ -47,7 +47,7 @@ async function loadBackground({ port, settings = {}, tabs = {}, cookies = [], na
     storage: { local: { get: async (d) => ({ ...d, port, ...settings }) }, onChanged: { addListener() {} } },
     webRequest: { onBeforeSendHeaders: cap('beforeSend'), onHeadersReceived: cap('headers'), onCompleted: cap('completed'), onErrorOccurred: cap('error') },
     webNavigation: { onCommitted: cap('nav') },
-    tabs: { get: async (id) => { if (!tabs[id]) { throw new Error('no tab'); } return { id, ...tabs[id] }; }, onRemoved: cap('tabRemoved') },
+    tabs: { get: async (id) => { if (!tabs[id]) { throw new Error('no tab'); } return { id, ...tabs[id] }; }, remove: async (id) => { (calls.closed = calls.closed || []).push(id); }, onRemoved: cap('tabRemoved') },
     browserAction: { setBadgeText: async (o) => { calls.badge.push(o); }, setBadgeBackgroundColor: async () => {} },
     downloads: {
       onCreated: cap('dlCreated'),
@@ -523,5 +523,21 @@ test('refresh link: when the app waits for a fresh link of this page, the new ca
   await sniff(bg, { tabId: 5, url: 'https://cdn.example/v/other.mp4', resp: { 'content-type': 'video/mp4', 'content-length': String(9 * MB) } });
   await sleep(200);
   assert.equal(manager.added.length, 1);
+  await api.close();
+});
+
+test('refresh link: a tab opened by the app (marker in the address) is recognised and closed after the new link is sent', async () => {
+  const manager = fakeManager();
+  const api = createApi(manager, { port: 0, getRefreshPending: () => [{ page: 'https://site.example/watch/77', kind: 'file' }] });
+  await api.listen();
+  opened.push(api);
+  const tabs = { 9: { url: 'https://site.example/watch/77#vexlo-refresh', title: 'Clip', incognito: false }, 5: TAB[5] };
+  const bg = await loadBackground({ port: api.port, tabs });
+  assert.equal(await bg.send({ type: 'refreshTab' }, { tab: { id: 9 } }), true);
+  assert.equal(await bg.send({ type: 'refreshTab' }, { tab: { id: 5 } }), false);
+  await sniff(bg, { tabId: 9, url: 'https://cdn.example/v/clip.mp4?tok=Z', resp: { 'content-type': 'video/mp4', 'content-length': String(9 * MB) } });
+  await sleep(1900);
+  assert.equal(manager.added.length, 1);
+  assert.deepEqual(plain(bg.calls.closed || []), [9]);
   await api.close();
 });
