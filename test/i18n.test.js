@@ -63,3 +63,37 @@ test('parseImportList: Vexlo export, plain text lines, junk and repeats', () => 
   assert.deepEqual(txt.map((x) => x.url), ['https://a.com/1.zip', 'https://a.com/2.zip']);
   assert.deepEqual(parseImportList(''), []);
 });
+
+test('archives: names are recognised and the extract folder is named after the file', () => {
+  const { isArchive, extractDirFor } = require('../src/core/util');
+  for (const n of ['a.zip', 'B.7Z', 'c.tar.gz', 'd.tgz', 'e.rar', 'f.tar']) { assert.equal(isArchive(n), true, n); }
+  for (const n of ['a.exe', 'zip', 'a.zip.part', 'movie.mp4']) { assert.equal(isArchive(n), false, n); }
+  const os = require('os'); const path = require('path'); const fs = require('fs');
+  const d = fs.mkdtempSync(path.join(os.tmpdir(), 'vx-ex-'));
+  assert.equal(extractDirFor(path.join(d, 'Pack.tar.gz')), path.join(d, 'Pack'));
+  fs.mkdirSync(path.join(d, 'Pack'));
+  assert.equal(extractDirFor(path.join(d, 'Pack.zip')), path.join(d, 'Pack (1)'));
+  fs.rmSync(d, { recursive: true, force: true });
+});
+
+test('extractCommands: WinRAR and 7-Zip are used when installed, tar is always the last resort', () => {
+  const { extractCommands } = require('../src/core/util');
+  const env = { ProgramFiles: 'C:\\Program Files', 'ProgramFiles(x86)': 'C:\\Program Files (x86)', SystemRoot: 'C:\\Windows' };
+  const has = (...files) => (f) => files.includes(f);
+  const names = (list) => list.map((c) => c.name);
+  const opt = (file, ...inst) => extractCommands(file, 'D:\\out\\Pack', { platform: 'win32', env, exists: has(...inst) });
+  const WR = 'C:\\Program Files\\WinRAR\\WinRAR.exe';
+  const UR = 'C:\\Program Files\\WinRAR\\UnRAR.exe';
+  const SZ = 'C:\\Program Files\\7-Zip\\7z.exe';
+  assert.deepEqual(names(opt('D:\\a.rar')), ['tar']);
+  assert.deepEqual(names(opt('D:\\a.rar', WR)), ['winrar', 'tar']);
+  assert.deepEqual(names(opt('D:\\a.rar', WR, UR, SZ)), ['unrar', 'winrar', '7zip', 'tar']);
+  assert.deepEqual(names(opt('D:\\a.7z', WR, SZ)), ['7zip', 'winrar', 'tar']);
+  assert.deepEqual(names(opt('D:\\a.zip', WR, SZ)), ['tar', '7zip', 'winrar']);
+  const rar = opt('D:\\a.rar', UR)[0];
+  assert.equal(rar.exe, UR);
+  assert.deepEqual(rar.args, ['x', '-y', '-p-', '-idq', 'D:\\a.rar', 'D:\\out\\Pack\\']);
+  assert.deepEqual(opt('D:\\a.7z', SZ)[0].args, ['x', '-y', '-oD:\\out\\Pack', 'D:\\a.7z']);
+  assert.equal(opt('D:\\a.zip')[0].exe, 'C:\\Windows\\System32\\tar.exe');
+  assert.deepEqual(names(extractCommands('/x/a.rar', '/x/a', { platform: 'linux' })), ['tar']);
+});

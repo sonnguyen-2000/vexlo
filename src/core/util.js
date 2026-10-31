@@ -156,7 +156,42 @@ function parseImportList(text) {
   return out;
 }
 
+const ARCHIVE_EXT = /\.(zip|7z|rar|tar|tgz|tbz2|txz|tar\.gz|tar\.bz2|tar\.xz|gz|bz2|xz)$/i;
+const isArchive = (name) => ARCHIVE_EXT.test(String(name || ''));
+
+/** Folder to extract "dir/Name.tar.gz" into: "dir/Name" (a numbered name if that already exists). */
+function extractDirFor(file) {
+  const dir = path.dirname(file);
+  const name = path.basename(file).replace(ARCHIVE_EXT, '') || 'extracted';
+  return uniquePath(dir, sanitizeFilename(name) || 'extracted');
+}
+
+/**
+ * Programs that can extract `file` into `dest`, best choice first. On Windows this looks for WinRAR (UnRAR.exe / WinRAR.exe)
+ * and 7-Zip in their usual folders and always ends with tar (built into Windows 10+, also fine for zip/tar).
+ * @returns {{name:string, exe:string, args:string[]}[]}
+ */
+function extractCommands(file, dest, { platform = process.platform, env = process.env, exists = fs.existsSync } = {}) {
+  const ext = (/\.([a-z0-9]+)$/i.exec(file) || [])[1] || '';
+  const tar = { name: 'tar', exe: platform === 'win32' ? path.win32.join(env.SystemRoot || 'C:\\Windows', 'System32', 'tar.exe') : 'tar', args: ['-xf', file, '-C', dest] };
+  if (platform !== 'win32') { return [tar]; }
+  const roots = [...new Set([env.ProgramFiles, env['ProgramFiles(x86)'], env.ProgramW6432, 'C:\\Program Files', 'C:\\Program Files (x86)'].filter(Boolean))];
+  const find = (rel) => { for (const r of roots) { const f = path.win32.join(r, rel); if (exists(f)) { return f; } } return ''; };
+  const withSlash = dest.endsWith('\\') ? dest : dest + '\\';
+  const found = [];
+  const unrar = find('WinRAR\\UnRAR.exe');
+  const winrar = find('WinRAR\\WinRAR.exe');
+  const seven = find('7-Zip\\7z.exe');
+  const cmdUnrar = unrar && { name: 'unrar', exe: unrar, args: ['x', '-y', '-p-', '-idq', file, withSlash] };
+  const cmdWinrar = winrar && { name: 'winrar', exe: winrar, args: ['x', '-ibck', '-y', '-p-', file, withSlash] };
+  const cmdSeven = seven && { name: '7zip', exe: seven, args: ['x', '-y', `-o${dest}`, file] };
+  if (ext.toLowerCase() === 'rar') { found.push(cmdUnrar, cmdWinrar, cmdSeven, tar); }
+  else if (ext.toLowerCase() === '7z') { found.push(cmdSeven, cmdUnrar || cmdWinrar, tar); }
+  else { found.push(tar, cmdSeven, cmdUnrar || cmdWinrar); }
+  return found.filter(Boolean);
+}
+
 module.exports = {
-  parseImportList, plainNotes, downloadLinkIn, sanitizeFilename, filenameFromContentDisposition, filenameFromUrl, extFromMime,
+  extractCommands, isArchive, extractDirFor, parseImportList, plainNotes, downloadLinkIn, sanitizeFilename, filenameFromContentDisposition, filenameFromUrl, extFromMime,
   pickFilename, uniquePath, sleep, atomicWriteJson,
 };

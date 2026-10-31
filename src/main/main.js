@@ -10,7 +10,9 @@ const { EngineClient } = require('../core/engine-client');
 const { createApi } = require('../core/api');
 const { folderFor } = require('../core/category');
 const { findDuplicate } = require('../core/dupes');
-const { uniquePath, downloadLinkIn, plainNotes, parseImportList } = require('../core/util');
+const {
+  uniquePath, downloadLinkIn, plainNotes, parseImportList, isArchive, extractDirFor, extractCommands,
+} = require('../core/util');
 const { dueActions, effectiveLimitKB } = require('../core/schedule');
 const { execFile } = require('child_process');
 const I18N = require('../renderer/i18n');
@@ -26,7 +28,7 @@ const DEFAULTS = {
   closeToTray: true, startWithOS: false, startHidden: true, notify: true, port: 6877, token: '', deleteMode: 'ask',
   progressWindow: true, progressFloat: true, progressAutoClose: true, progressOnError: 'ask',
   scheduleEnabled: false, scheduleStart: '01:00', scheduleStop: '', scheduleDays: [0, 1, 2, 3, 4, 5, 6],
-  autoUpdate: true, language: 'auto', clipboardWatch: false, proxyMode: 'off', proxyUrl: '',
+  autoUpdate: true, language: 'auto', clipboardWatch: false, autoExtract: false, proxyMode: 'off', proxyUrl: '',
   limitWindowEnabled: false, limitWindowFrom: '08:00', limitWindowTo: '22:00', limitWindowKB: 500,
 };
 
@@ -69,6 +71,7 @@ function clampSettings(s) {
     scheduleDays: Array.isArray(s.scheduleDays) ? [...new Set(s.scheduleDays.map(Number).filter((d) => Number.isInteger(d) && d >= 0 && d <= 6))] : DEFAULTS.scheduleDays,
     autoUpdate: s.autoUpdate !== false,
     clipboardWatch: !!s.clipboardWatch,
+    autoExtract: !!s.autoExtract,
     proxyMode: ['off', 'system', 'custom'].includes(s.proxyMode) ? s.proxyMode : 'off',
     proxyUrl: typeof s.proxyUrl === 'string' ? s.proxyUrl.trim().slice(0, 300) : '',
     limitWindowEnabled: !!s.limitWindowEnabled,
@@ -126,6 +129,42 @@ function applyLimit() {
   if (!manager) { return; }
   const kb = currentLimitKB();
   if (kb !== appliedLimit) { appliedLimit = kb; manager.setSpeedLimit(kb * 1024); }
+}
+
+// ---- extract an archive next to itself, into a new folder named after it (Windows ships tar.exe, which reads zip/7z/tar/rar...).
+// tar refuses entries that would land outside the target folder, so a hostile archive cannot overwrite other files.
+function extractArchive(file) {
+  return new Promise((resolve) => {
+    const dest = extractDirFor(file);
+    try { fs.mkdirSync(dest, { recursive: true }); } catch (e) { return resolve({ ok: false, error: e.message }); }
+    const cmds = extractCommands(file, dest); // WinRAR / 7-Zip when installed (better for .rar and .7z), then tar
+    let lastError = '';
+    const next = (i) => {
+      if (i >= cmds.length) {
+        try { if (!fs.readdirSync(dest).length) { fs.rmdirSync(dest); } } catch { /* leave what was extracted */ }
+        return resolve({ ok: false, error: lastError });
+      }
+      const c = cmds[i];
+      const child = execFile(c.exe, c.args, { timeout: 30 * 60 * 1000, windowsHide: true }, (err, stdout, stderr) => {
+        if (!err) { return resolve({ ok: true, dir: dest, with: c.name }); }
+        lastError = String(stderr || stdout || err.message || '').split('\n').map((x) => x.trim()).find(Boolean) || lastError;
+        return next(i + 1);
+      });
+      if (child.stdin) { child.stdin.on('error', () => {}); child.stdin.end(); } // never wait for a password prompt
+    };
+    next(0);
+  });
+}
+async function extractAndTell(file) {
+  const r = await extractArchive(file);
+  if (settings.notify && Notification.isSupported()) {
+    const n = new Notification({
+      title: r.ok ? T('Đã giải nén') : T('Không giải nén được'), body: r.ok ? path.basename(r.dir) : `${path.basename(file)}: ${r.error || ''}`, silent: true,
+    });
+    if (r.ok) { n.on('click', () => shell.openPath(r.dir)); }
+    n.show();
+  }
+  return r;
 }
 
 // ---- proxy: off, the Windows/system one, or typed by the user. Only HTTP proxies are used (not SOCKS).
@@ -601,6 +640,12 @@ function registerIpc() {
     return { added, skipped, total: list.length };
   });
   // Windows Defender scan of one downloaded file (report only: nothing is removed without the user deciding).
+  ipcMain.handle('dl:extract', async (_e, id) => {
+    const t = manager.get(id);
+    const file = t && t.state.path;
+    if (!file || !fs.existsSync(file) || !isArchive(file)) { return { ok: false, error: 'not an archive' }; }
+    return extractAndTell(file);
+  });
   ipcMain.handle('dl:scan', async (e, id) => {
     const t = manager.get(id);
     const file = t && t.state.path;
@@ -796,6 +841,7 @@ function wireManager() {
     forgetRetry(s.id);
     broadcast('dl:update', s);
     if (afterAll !== 'none') { afterArmed++; checkAfterAll(); }
+    if (settings.autoExtract && s.path && s.kind === 'file' && isArchive(s.path)) { extractAndTell(s.path); }
     if (settings.notify && Notification.isSupported()) {
       const n = new Notification({ title: T('Đã tải xong'), body: s.filename, silent: false });
       n.on('click', () => { if (s.path) { shell.showItemInFolder(s.path); } });

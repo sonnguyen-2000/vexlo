@@ -30,6 +30,7 @@ contextBridge.exposeInMainWorld('vexlo', {
   exportList: call('app:exportList'),
   importList: call('app:importList'),
   scanFile: call('dl:scan'),
+  extractFile: call('dl:extract'),
   whatsNew: call('app:whatsNew'),
   exportLog: call('app:exportLog'),
   updateStatus: call('update:status'),

@@ -432,6 +432,11 @@
       sel.some((t) => t.status === 'queued') && [T('Cho xuống cuối hàng đợi'), 'i-pause', () => bridge.prioritize(sel.map((t) => t.id), 'bottom')],
       canPause && [T('Tạm dừng'), 'i-pause', () => bridge.pause(sel.map((t) => t.id))],
       one && one.status === 'done' && [T('Tính mã SHA-256 (kiểm tra tệp)'), 'i-open', async () => { toast(T('Đang tính mã SHA-256...')); if (!(await bridge.hashFile(one.id))) { toast(T('Không đọc được tệp'), true); } }],
+      one && one.status === 'done' && /\.(zip|7z|rar|tar|tgz|tbz2|txz|gz|bz2|xz)$/i.test(one.path || one.filename || '') && [T('Giải nén tại đây'), 'i-folder', async () => {
+        toast(T('Đang giải nén...'));
+        const r = await bridge.extractFile(one.id);
+        if (!r.ok) { toast(T('Không giải nén được'), true); }
+      }],
       one && one.status === 'done' && [T('Quét virus bằng Windows Defender'), 'i-open', async () => {
         toast(T('Đang quét...'));
         const r = await bridge.scanFile(one.id);
@@ -547,6 +552,7 @@
     $('sOnErr').value = settings.progressOnError || 'ask';
     $('sUpd').checked = settings.autoUpdate !== false;
     $('sClip').checked = !!settings.clipboardWatch;
+    $('sExtract').checked = !!settings.autoExtract;
     $('sSchOn').checked = !!settings.scheduleEnabled;
     $('sSchStart').value = settings.scheduleStart || '01:00';
     $('sSchStop').value = settings.scheduleStop || '';
@@ -647,7 +653,7 @@
   });
   $('sSave').addEventListener('click', async () => {
     settings = await bridge.setSettings({
-      downloadDir: $('sDir').value.trim(), categorize: $('sCat').checked, confirm: $('sConfirm').checked, notify: $('sNotify').checked, language: $('sLang').value, progressWindow: $('sProg').checked, progressFloat: $('sFloat').checked, progressOnError: $('sOnErr').value, autoUpdate: $('sUpd').checked, clipboardWatch: $('sClip').checked,
+      downloadDir: $('sDir').value.trim(), categorize: $('sCat').checked, confirm: $('sConfirm').checked, notify: $('sNotify').checked, language: $('sLang').value, progressWindow: $('sProg').checked, progressFloat: $('sFloat').checked, progressOnError: $('sOnErr').value, autoUpdate: $('sUpd').checked, clipboardWatch: $('sClip').checked, autoExtract: $('sExtract').checked,
       scheduleEnabled: $('sSchOn').checked, scheduleStart: $('sSchStart').value, scheduleStop: $('sSchStop').value,
       scheduleDays: [0, 1, 2, 3, 4, 5, 6].filter((d) => $('sDay' + d).checked), deleteMode: $('sDelete').value,
       closeToTray: $('sTray').checked, startWithOS: $('sStart').checked, startHidden: $('sHidden').checked, connections: Number($('sConn').value),

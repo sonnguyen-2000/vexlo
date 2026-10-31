@@ -76,6 +76,8 @@
     '127.0.0.1:8080 hoặc http://tên:mật-khẩu@máy-chủ:8080': '127.0.0.1:8080 or http://user:password@host:8080',
     'Chỉ hỗ trợ proxy HTTP/HTTPS, không hỗ trợ SOCKS. Địa chỉ nội bộ như localhost luôn đi thẳng. Cần bấm Lưu để áp dụng.': 'Only HTTP/HTTPS proxies are supported, not SOCKS. Local addresses such as localhost always go direct. Press Save to apply.',
     'Proxy yêu cầu đăng nhập (407)': 'The proxy requires a login (407)',
+    'Tự giải nén file nén sau khi tải xong': 'Extract archives automatically after downloading', '.zip, .7z, .rar, .tar... được giải nén vào một thư mục cùng tên, ngay cạnh file. File nén gốc được giữ lại. Dùng WinRAR hoặc 7-Zip nếu máy có.': '.zip, .7z, .rar, .tar... are extracted into a folder with the same name next to the file. The original archive is kept. Uses WinRAR or 7-Zip if installed.',
+    'Giải nén tại đây': 'Extract here', 'Đang giải nén...': 'Extracting...', 'Đã giải nén': 'Extracted', 'Không giải nén được': 'Could not extract',
     'Vexlo: phát hiện link tải': 'Vexlo: download link found', '{u}\nBấm để tải bằng Vexlo': '{u}\nClick to download with Vexlo',
     'Lấy từ trang phát hành của dự án trên GitHub': 'Taken from the project releases page on GitHub', 'Chạy cùng Windows': 'Start with Windows',
     'Số kết nối mỗi tệp (1–32)': 'Connections per file (1–32)', '8 là mức cân bằng. Một số máy chủ chặn khi quá nhiều kết nối.': '8 is a good balance. Some servers block too many connections.',
