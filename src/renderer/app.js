@@ -432,6 +432,11 @@
       sel.some((t) => t.status === 'queued') && [T('Cho xuống cuối hàng đợi'), 'i-pause', () => bridge.prioritize(sel.map((t) => t.id), 'bottom')],
       canPause && [T('Tạm dừng'), 'i-pause', () => bridge.pause(sel.map((t) => t.id))],
       one && one.status === 'done' && [T('Tính mã SHA-256 (kiểm tra tệp)'), 'i-open', async () => { toast(T('Đang tính mã SHA-256...')); if (!(await bridge.hashFile(one.id))) { toast(T('Không đọc được tệp'), true); } }],
+      one && one.status === 'done' && [T('Quét virus bằng Windows Defender'), 'i-open', async () => {
+        toast(T('Đang quét...'));
+        const r = await bridge.scanFile(one.id);
+        if (!r.ok) { toast(T('Không quét được (cần Windows Defender trên Windows)'), true); } else { toast(r.clean ? T('Không phát hiện mối đe dọa') : T('Windows Defender phát hiện mối đe dọa! Hãy mở Windows Security để xử lý.'), !r.clean); }
+      }],
       one && [T('Sao chép link'), 'i-copy', async () => { await bridge.copyLink(one.id); toast(T('Đã sao chép link')); }],
       one && one.status === 'error' && one.meta && one.meta.page && [T('Làm mới link'), 'i-play', async () => {
         toast(await bridge.refreshLink(one.id) ? T('Đang lấy link mới: trang gốc mở trong trình duyệt, Vexlo tự phát video, lấy link rồi tự tải lại. Nếu video không tự chạy, bạn bấm phát.') : T('Không có địa chỉ trang gốc'), false);
@@ -616,6 +621,17 @@
   $('bLog').addEventListener('click', async () => {
     const f = await bridge.exportLog();
     $('logMsg').textContent = f ? T('Đã lưu nhật ký: {f}', { f }) : '';
+  });
+  $('bExpList').addEventListener('click', async () => {
+    const r = await bridge.exportList();
+    $('logMsg').textContent = r && r.file ? T('Đã lưu {n} mục: {f}', { n: r.count, f: r.file }) : '';
+  });
+  $('bImpList').addEventListener('click', async () => {
+    const r = await bridge.importList();
+    if (!r || r.canceled) { return; }
+    if (r.error) { toast(T('Không đọc được tệp danh sách'), true); return; }
+    closeModals();
+    toast(r.total ? T('Đã nhập {n} link ({s} link đã có hoặc không hợp lệ bị bỏ qua)', { n: r.added, s: r.skipped }) : T('Tệp không có link nào hợp lệ'), !r.total);
   });
   $('bUpd').addEventListener('click', async () => {
     if ($('bUpd').dataset.ready) { bridge.updateInstall(); return; }

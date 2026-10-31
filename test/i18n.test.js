@@ -47,3 +47,19 @@ test('plainNotes: release Markdown becomes readable plain text', () => {
   assert.equal(plainNotes(''), '');
   assert.equal(plainNotes('x'.repeat(50), 10).length, 10);
 });
+
+test('parseImportList: Vexlo export, plain text lines, junk and repeats', () => {
+  const { parseImportList } = require('../src/core/util');
+  const json = JSON.stringify({ app: 'vexlo', items: [
+    { url: 'https://a.com/x.zip', filename: '..\\evil/x.zip', kind: 'file', page: 'https://a.com/p' },
+    { url: 'https://a.com/x.zip' }, { url: 'javascript:alert(1)' }, { url: 'ftp://a/b' }, { url: 'https://b.com/v.m3u8', kind: 'weird' }, 'https://c.com/y.mp4',
+  ] });
+  const r = parseImportList(json);
+  assert.deepEqual(r.map((x) => x.url), ['https://a.com/x.zip', 'https://b.com/v.m3u8', 'https://c.com/y.mp4']);
+  assert.ok(!/[\\/]/.test(r[0].filename), 'path parts stripped from names: ' + r[0].filename);
+  assert.equal(r[0].page, 'https://a.com/p');
+  assert.equal(r[1].kind, undefined);
+  const txt = parseImportList('\uFEFFhttps://a.com/1.zip\r\n\r\nnot a link\r\nhttps://a.com/2.zip\r\nhttps://a.com/1.zip');
+  assert.deepEqual(txt.map((x) => x.url), ['https://a.com/1.zip', 'https://a.com/2.zip']);
+  assert.deepEqual(parseImportList(''), []);
+});

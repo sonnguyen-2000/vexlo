@@ -128,7 +128,35 @@ function plainNotes(md, max = 4000) {
   return t.length > max ? t.slice(0, max - 1).trimEnd() + '\u2026' : t;
 }
 
+/**
+ * Read a list of downloads from a file the user picked: either a Vexlo export ({ app:'vexlo', items:[{url,filename,kind,page}] })
+ * or plain text with one link per line. Returns [{ url, filename, kind, page }] with only http(s) links, no repeats.
+ */
+function parseImportList(text) {
+  const raw = String(text || '').replace(/^\uFEFF/, '');
+  let items = [];
+  try {
+    const j = JSON.parse(raw);
+    const arr = Array.isArray(j) ? j : (j && Array.isArray(j.items) ? j.items : null);
+    if (arr) { items = arr.map((x) => (typeof x === 'string' ? { url: x } : x)); }
+  } catch { items = raw.split(/\r?\n/).map((l) => ({ url: l.trim() })); }
+  const seen = new Set();
+  const out = [];
+  for (const it of items) {
+    const url = it && typeof it.url === 'string' ? it.url.trim() : '';
+    if (!/^https?:\/\/\S+$/i.test(url) || seen.has(url)) { continue; }
+    seen.add(url);
+    out.push({
+      url,
+      filename: typeof it.filename === 'string' ? sanitizeFilename(it.filename) : '',
+      kind: ['file', 'hls', 'dash'].includes(it.kind) ? it.kind : undefined,
+      page: typeof it.page === 'string' && /^https?:\/\//i.test(it.page) ? it.page : '',
+    });
+  }
+  return out;
+}
+
 module.exports = {
-  plainNotes, downloadLinkIn, sanitizeFilename, filenameFromContentDisposition, filenameFromUrl, extFromMime,
+  parseImportList, plainNotes, downloadLinkIn, sanitizeFilename, filenameFromContentDisposition, filenameFromUrl, extFromMime,
   pickFilename, uniquePath, sleep, atomicWriteJson,
 };

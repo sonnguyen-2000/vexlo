@@ -10,7 +10,7 @@ const { EngineClient } = require('../core/engine-client');
 const { createApi } = require('../core/api');
 const { folderFor } = require('../core/category');
 const { findDuplicate } = require('../core/dupes');
-const { uniquePath, downloadLinkIn, plainNotes } = require('../core/util');
+const { uniquePath, downloadLinkIn, plainNotes, parseImportList } = require('../core/util');
 const { dueActions, effectiveLimitKB } = require('../core/schedule');
 const { execFile } = require('child_process');
 const I18N = require('../renderer/i18n');
@@ -548,6 +548,50 @@ function registerIpc() {
     if (r.canceled || !r.filePath) { return ''; }
     fs.writeFileSync(r.filePath, lines.join('\n'), 'utf8');
     return r.filePath;
+  });
+  // Save / load the download list (links, names, kind, original page) so it survives a reinstall or moves to another PC.
+  ipcMain.handle('app:exportList', async (e) => {
+    const items = manager.list().filter((t) => !t.pending).map((t) => ({
+      url: t.url, filename: t.filename || '', kind: t.kind, page: (t.meta && t.meta.page) || '', status: t.status,
+    }));
+    if (!items.length) { return { count: 0 }; }
+    const win = BrowserWindow.fromWebContents(e.sender);
+    const r = await dialog.showSaveDialog(win, { defaultPath: path.join(app.getPath('desktop'), 'vexlo-downloads.json'), filters: [{ name: 'Vexlo list', extensions: ['json'] }] });
+    if (r.canceled || !r.filePath) { return { count: 0 }; }
+    fs.writeFileSync(r.filePath, JSON.stringify({ app: 'vexlo', version: VERSION, items }, null, 2), 'utf8');
+    return { count: items.length, file: r.filePath };
+  });
+  ipcMain.handle('app:importList', async (e) => {
+    const win = BrowserWindow.fromWebContents(e.sender);
+    const r = await dialog.showOpenDialog(win, { properties: ['openFile'], filters: [{ name: 'Vexlo list / text', extensions: ['json', 'txt'] }] });
+    if (r.canceled || !r.filePaths[0]) { return { canceled: true }; }
+    let list = [];
+    try { list = parseImportList(fs.readFileSync(r.filePaths[0], 'utf8').slice(0, 20 * 1024 * 1024)); } catch { return { added: 0, skipped: 0, total: 0, error: true }; }
+    let added = 0;
+    let skipped = 0;
+    for (const it of list.slice(0, 2000)) {
+      const kind = detectKind(it.url, it.kind);
+      const dir = categoryDir(it.filename || it.url, kind);
+      const dup = findDuplicate(manager.list(), { url: it.url, filename: it.filename, dir, page: it.page, kind }, { exists: fs.existsSync });
+      if (dup && dup.type === 'active') { skipped++; continue; }
+      try {
+        manager.add({ url: it.url, filename: it.filename || undefined, kind, dir, connections: settings.connections, meta: it.page ? { page: it.page } : {}, start: true });
+        added++;
+      } catch { skipped++; }
+    }
+    return { added, skipped, total: list.length };
+  });
+  // Windows Defender scan of one downloaded file (report only: nothing is removed without the user deciding).
+  ipcMain.handle('dl:scan', async (e, id) => {
+    const t = manager.get(id);
+    const file = t && t.state.path;
+    if (process.platform !== 'win32' || !file || !fs.existsSync(file)) { return { ok: false, reason: 'unavailable' }; }
+    const exe = path.join(process.env.ProgramFiles || 'C:\\Program Files', 'Windows Defender', 'MpCmdRun.exe');
+    if (!fs.existsSync(exe)) { return { ok: false, reason: 'unavailable' }; }
+    const code = await new Promise((resolve) => {
+      execFile(exe, ['-Scan', '-ScanType', '3', '-File', file, '-DisableRemediation'], { timeout: 10 * 60 * 1000, windowsHide: true }, (err) => resolve(err ? (typeof err.code === 'number' ? err.code : -1) : 0));
+    });
+    return code === 0 ? { ok: true, clean: true } : code === 2 ? { ok: true, clean: false } : { ok: false, reason: 'failed' };
   });
   ipcMain.handle('update:status', () => updStatus);
   ipcMain.handle('update:install', () => { if (updater && updStatus.state === 'ready') { applyUpdateNow(); } return true; });
