@@ -613,7 +613,8 @@ function registerIpc() {
       counts[t.status] = (counts[t.status] || 0) + 1;
       if (t.status === 'error') { lines.push(`error: ${String(t.error || '').slice(0, 200)} (${t.kind})`); }
     }
-    lines.push('count by status: ' + JSON.stringify(counts), '', '== update.log (last 200 lines)');
+    lines.push('count by status: ' + JSON.stringify(counts), '', '== connection log (last 150 events: retries, slow segments, engine stalls)');
+    lines.push(...(netLog.length ? netLog.slice(-150) : ['(nothing reported)']), '', '== update.log (last 200 lines)');
     try { lines.push(...fs.readFileSync(path.join(app.getPath('userData'), 'update.log'), 'utf8').split('\n').slice(-200)); } catch { lines.push('(no update.log)'); }
     const win = BrowserWindow.fromWebContents(e.sender);
     const r = await dialog.showSaveDialog(win, { defaultPath: path.join(app.getPath('desktop'), `vexlo-log-${VERSION}.txt`), filters: [{ name: 'Text', extensions: ['txt'] }] });
@@ -839,6 +840,7 @@ function maybeAutoRetry(s) {
 }
 function forgetRetry(id) { const st = retryState.get(id); if (st && st.timer) { clearTimeout(st.timer); } retryState.delete(id); }
 
+const netLog = []; // recent connection problems / stalls reported by the engine, shown in the exported log
 function wireManager() {
   const throttle = new Map();
   manager.on('update', (s) => {
@@ -863,7 +865,7 @@ function wireManager() {
     }
   });
   manager.on('error', (s) => { broadcast('dl:update', s); maybeAutoRetry(s); checkAfterAll(); });
-  manager.on('warn', () => {});
+  manager.on('warn', (e) => { netLog.push(`${new Date().toISOString().slice(11, 19)} ${String((e && e.message) || e).slice(0, 300)}`); if (netLog.length > 300) { netLog.splice(0, netLog.length - 300); } });
 }
 
 // ------------------------------------------------------------------ lifecycle

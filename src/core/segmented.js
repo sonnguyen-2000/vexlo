@@ -13,6 +13,7 @@ const { Download } = require('./download');
 const { sleep, uniquePath } = require('./util');
 
 const SEG_RETRIES = 6;
+const SEG_IDLE_MS = Number(process.env.VEXLO_IDLE_MS) || 8000; // a connection that sends nothing for this long is dropped and the segment is asked again on a fresh one
 
 function resolveFfmpeg(explicit) {
   if (explicit) { return explicit; }
@@ -22,6 +23,17 @@ function resolveFfmpeg(explicit) {
     // Binaries cannot run from inside app.asar; electron-builder unpacks them next to it.
     return p ? p.replace('app.asar' + require('path').sep, 'app.asar.unpacked' + require('path').sep) : 'ffmpeg';
   } catch { return 'ffmpeg'; }
+}
+
+/** fs.rename that tries again for a moment when Windows says the file is busy (EPERM / EBUSY / EACCES). */
+async function renameRetry(from, to) {
+  for (let i = 0; ; i++) {
+    try { return await fsp.rename(from, to); }
+    catch (e) {
+      if (i >= 8 || !['EPERM', 'EBUSY', 'EACCES'].includes(e.code)) { throw e; }
+      await sleep(80 * (i + 1));
+    }
+  }
 }
 
 /** HLS / DASH downloader: fetch playlist, download segments in parallel, merge, remux with ffmpeg. */
@@ -252,13 +264,14 @@ class SegmentedDownload extends EventEmitter {
     const s = this.state;
     let attempt = 0;
     for (;;) {
+      let received = 0;
+      const t0 = Date.now();
       try {
         const headers = { ...s.headers };
         if (job.range) { headers.range = `bytes=${job.range.start}-${job.range.end}`; }
-        const { res } = await request(job.url, { headers, signal: this.ac.signal });
+        const { res } = await request(job.url, { headers, signal: this.ac.signal, timeout: 20000, idleTimeout: SEG_IDLE_MS });
         if (res.statusCode !== 200 && res.statusCode !== 206) { res.destroy(); throw classifyStatus(res.statusCode, res); }
         const chunks = [];
-        let received = 0;
         for await (const c of res) {
           if (this._stopReason) { res.destroy(); return; }
           await this.limiter.wait(c.length);
@@ -277,17 +290,21 @@ class SegmentedDownload extends EventEmitter {
         }
         const f = this._segPath(job);
         await fsp.writeFile(f + '.tmp', data);
-        await fsp.rename(f + '.tmp', f);
+        await renameRetry(f + '.tmp', f); // antivirus / indexers may hold the new file for a moment on Windows
         this._doneSegs++;
         s.segDone = this._doneSegs;
         this._updateSizes();
         this._emitProgress();
+        if (Date.now() - t0 > 6000) { this.emit('warn', `slow segment t${job.ti}#${job.idx} took ${Date.now() - t0} ms (${received} bytes)`); }
         return;
       } catch (err) {
         if (this._stopReason || err.fatal) { throw err; }
-        // Roll back counters for the failed partial attempt.
+        this._runBytes -= received; // the failed attempt's bytes are thrown away, do not count them twice
+        this._updateSizes();
         if (++attempt > SEG_RETRIES) { throw err; }
-        await sleep(Math.min(8000, 300 * 2 ** (attempt - 1)));
+        const wait = Math.min(8000, 300 * 2 ** (attempt - 1));
+        this.emit('warn', `segment t${job.ti}#${job.idx} attempt ${attempt} failed after ${Date.now() - t0} ms (${err.code || err.status || err.message}), retry in ${wait} ms`);
+        await sleep(wait);
       }
     }
   }

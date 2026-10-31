@@ -92,7 +92,7 @@ function lowerKeys(obj = {}) {
  * Cookie/Authorization are dropped when a redirect crosses to another host.
  * Resolves with { res, url } where res is a live IncomingMessage (caller must consume/destroy it).
  */
-function request(url, { method = 'GET', headers = {}, signal, maxRedirects = 10, timeout = 25000 } = {}) {
+function request(url, { method = 'GET', headers = {}, signal, maxRedirects = 10, timeout = 25000, idleTimeout = 0 } = {}) {
   return new Promise((resolve, reject) => {
     let redirects = 0;
     let currentUrl = url;
@@ -152,7 +152,7 @@ function request(url, { method = 'GET', headers = {}, signal, maxRedirects = 10,
         }
         cleanup();
         // Idle-socket timeout for the body.
-        res.setTimeout(timeout, () => res.destroy(Object.assign(new Error('timeout'), { code: 'ETIMEDOUT' })));
+        res.setTimeout(idleTimeout || timeout, () => res.destroy(Object.assign(new Error('timeout'), { code: 'ETIMEDOUT' })));
         resolve({ res, url: currentUrl });
       });
       req.end();

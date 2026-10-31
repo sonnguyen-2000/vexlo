@@ -10,6 +10,7 @@ const { pickFilename, sleep, uniquePath } = require('./util');
 const MIN_SPLIT = 512 * 1024;      // never split a segment smaller than this
 const MIN_SEGMENT = 1024 * 1024;   // initial segment size lower bound
 const MAX_RETRIES = 8;
+const IDLE_MS = Number(process.env.VEXLO_IDLE_MS) || 10000; // no data for this long: drop the connection and ask again (a stuck connection often recovers on a new one)
 
 /**
  * Probe a URL: size, range support, name and validators.
@@ -280,6 +281,7 @@ class Download extends EventEmitter {
         }
         if (attempt > MAX_RETRIES) { throw err; }
         const delay = err.retryAfter || Math.min(15000, 400 * 2 ** (attempt - 1));
+        this.emit('warn', `connection ${seg.idx === undefined ? '' : '#' + seg.idx + ' '}attempt ${attempt} failed (${err.code || err.status || err.message}), retry in ${delay} ms`);
         await sleep(delay);
       }
     }
@@ -290,6 +292,7 @@ class Download extends EventEmitter {
     const { res } = await request(s.finalUrl || s.url, {
       headers: { ...s.headers, range: `bytes=${seg.pos}-${seg.end}` },
       signal: this.ac.signal,
+      idleTimeout: IDLE_MS,
     });
     if (res.statusCode !== 206) {
       res.destroy();
@@ -334,7 +337,7 @@ class Download extends EventEmitter {
     let attempt = 0;
     for (;;) {
       try {
-        const { res } = await request(s.finalUrl || s.url, { headers: s.headers, signal: this.ac.signal });
+        const { res } = await request(s.finalUrl || s.url, { headers: s.headers, signal: this.ac.signal, idleTimeout: IDLE_MS });
         if (res.statusCode < 200 || res.statusCode >= 300) {
           res.destroy();
           throw classifyStatus(res.statusCode, res);

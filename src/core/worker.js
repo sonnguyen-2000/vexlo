@@ -48,5 +48,14 @@ listen(async (msg) => {
   }
 });
 
+// If this process ever stalls (heavy disk work, a huge list...), say so: it would show up as "the download paused for a few seconds".
+let lagLast = Date.now();
+setInterval(() => {
+  const now = Date.now();
+  const lag = now - lagLast - 1000;
+  lagLast = now;
+  if (lag > 700) { post({ t: 'ev', name: 'warn', data: `engine was busy for ${lag} ms (event loop lag)` }); }
+}, 1000).unref();
+
 process.on('uncaughtException', (e) => { post({ t: 'ev', name: 'warn', data: 'worker: ' + ((e && e.stack) || e) }); });
 process.on('unhandledRejection', (e) => { post({ t: 'ev', name: 'warn', data: 'worker: ' + ((e && e.stack) || e) }); });

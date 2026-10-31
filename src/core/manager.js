@@ -91,6 +91,7 @@ class DownloadManager extends EventEmitter {
     const dl = this._makeDl(state);
     const task = { dl, state: dl.state };
     this.tasks.set(state.id, task);
+    dl.on('warn', (m) => { this.emit('warn', new Error(`[${state.filename || state.id.slice(0, 8)}] ${m}`)); });
     dl.on('progress', (p) => { this.emit('update', this.snapshot(task)); });
     dl.on('status', () => { this.emit('update', this.snapshot(task)); this._scheduleSave(); });
     dl.on('done', () => { this.emit('done', this.snapshot(task)); this.saveNow(); this._pump(); });
