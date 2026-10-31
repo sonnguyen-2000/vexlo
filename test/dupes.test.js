@@ -36,3 +36,15 @@ test('active duplicate wins over an older failed one', () => {
   assert.equal(r.type, 'active');
   assert.equal(r.task.id, 'a');
 });
+
+test('a failed stream is replaced when the same video comes back with a new link, found by title or by page (hash ignored)', () => {
+  const old = T({ id: 'f', status: 'error', kind: 'hls', url: 'https://cdn/old.m3u8?t=1', meta: { page: 'https://site/watch/9', title: 'My Clip' } });
+  // new link, no name, page given as the extension sends it
+  assert.equal(findDuplicate([old], { url: 'https://cdn/new.m3u8?t=2', kind: 'hls', page: 'https://site/watch/9#vexlo-refresh' }).type, 'error');
+  // different page address but the same title
+  assert.equal(findDuplicate([old], { url: 'https://cdn/new.m3u8?t=2', kind: 'hls', page: 'https://site/other', title: 'my clip' }).type, 'error');
+  // another video is not touched
+  assert.equal(findDuplicate([old], { url: 'https://cdn/new.m3u8?t=2', kind: 'hls', page: 'https://site/watch/10', title: 'Other' }), null);
+  // plain files are never matched by page or title alone
+  assert.equal(findDuplicate([old], { url: 'https://cdn/a.zip', kind: 'file', page: 'https://site/watch/9', title: 'My Clip' }), null);
+});

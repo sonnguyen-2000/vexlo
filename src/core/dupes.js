@@ -11,7 +11,7 @@ const lc = (s) => String(s || '').toLowerCase();
 
 /**
  * @param {Array} tasks existing task snapshots
- * @param {{url:string, filename?:string, dir?:string, page?:string, kind?:string}} q the new download
+ * @param {{url:string, filename?:string, dir?:string, page?:string, title?:string, kind?:string}} q the new download
  * @param {{exists?:(p:string)=>boolean, ignoreId?:string}} opts
  * @returns {null | {type:'active'|'error'|'done', task?:object, path?:string}}
  */
@@ -19,13 +19,16 @@ function findDuplicate(tasks, q, { exists = () => false, ignoreId = '' } = {}) {
   const others = tasks.filter((t) => t.id !== ignoreId);
   const sameUrl = (t) => stripHash(t.url) === stripHash(q.url);
   const sameName = (t) => !!q.filename && !!t.filename && lc(t.filename) === lc(q.filename);
-  const samePage = (t) => !!q.page && !!(t.meta && t.meta.page) && t.meta.page === q.page && t.kind !== 'file' && q.kind !== 'file';
+  const stream = (t) => t.kind !== 'file' && q.kind !== 'file';
+  const samePage = (t) => !!q.page && !!(t.meta && t.meta.page) && stripHash(t.meta.page) === stripHash(q.page) && stream(t);
+  // Streams are named after the page title, so the same title means the same video even when the link (and page address) changed.
+  const sameTitle = (t) => !!q.title && !!(t.meta && t.meta.title) && lc(t.meta.title) === lc(q.title) && stream(t);
 
   const active = others.find((t) => ['downloading', 'queued', 'paused'].includes(t.status) && !t.pending && sameUrl(t));
   if (active) { return { type: 'active', task: active }; }
 
-  // A failed attempt: same link, same file name, or (streams) the same page. Its link may have expired, so the URL can differ.
-  const failed = others.find((t) => t.status === 'error' && (sameUrl(t) || sameName(t) || samePage(t)));
+  // A failed attempt: same link, same file name, or (streams) the same page or title. Its link may have expired, so the URL can differ.
+  const failed = others.find((t) => t.status === 'error' && (sameUrl(t) || sameName(t) || samePage(t) || sameTitle(t)));
   if (failed) { return { type: 'error', task: failed }; }
 
   if (q.filename && q.dir) {

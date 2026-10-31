@@ -220,14 +220,20 @@
   document.addEventListener('click', (e) => { if (panelOpen && e.target !== host) { closePanel(); } }, true);
 
   // Tabs opened by the app's "Refresh link": start the video by itself (muted, so browsers allow it) so the new link is captured.
+  // It stops as soon as the video is playing, or the moment the user touches the page, so the user can always pause it.
   api.runtime.sendMessage({ type: 'refreshTab' }).then((yes) => {
     if (!yes) { return; }
     let tries = 0;
-    const timer = setInterval(() => {
-      if (++tries > 40) { clearInterval(timer); return; } // about 20 seconds
-      for (const v of document.querySelectorAll('video')) {
-        if (v.paused) { v.muted = true; const p = v.play(); if (p && p.catch) { p.catch(() => {}); } }
-      }
+    let timer = 0;
+    const halt = () => {
+      clearInterval(timer);
+      for (const ev of ['pointerdown', 'keydown', 'touchstart']) { document.removeEventListener(ev, halt, true); }
+    };
+    for (const ev of ['pointerdown', 'keydown', 'touchstart']) { document.addEventListener(ev, halt, true); }
+    timer = setInterval(() => {
+      const vids = [...document.querySelectorAll('video')];
+      if (++tries > 40 || vids.some((v) => !v.paused)) { halt(); return; } // about 20 seconds; or it is already playing
+      for (const v of vids) { v.muted = true; const p = v.play(); if (p && p.catch) { p.catch(() => {}); } }
     }, 500);
   }).catch(() => {});
 

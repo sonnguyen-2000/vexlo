@@ -319,7 +319,9 @@ function handleExternalAdd(items) {
       if (j && Date.now() - j.at < 20000 && j.id) { return j.id; } // same page, same kind, moments after a refresh: not a second download
     }
     const dir = categoryDir(it.filename || it.url, kind);
-    const dup = findDuplicate(manager.list(), { url: it.url, filename: it.filename, dir, page: it.page, kind }, { exists: fs.existsSync });
+    const dup = findDuplicate(manager.list(), {
+      url: it.url, filename: it.filename, dir, page: pageOf, title: it.meta && it.meta.title, kind,
+    }, { exists: fs.existsSync });
     if (dup && dup.type === 'active') { notifyDuplicate(dup.task); return dup.task.id; } // already in the list: never download twice
     const replaceId = dup && dup.type === 'error' ? dup.task.id : undefined; // failed before: replace it, keep the plain name
     const filename = it.filename || (replaceId ? dup.task.filename : undefined);
