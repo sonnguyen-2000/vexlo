@@ -39,3 +39,11 @@ test('clipboard: only a single http(s) link to a file is offered', () => {
   assert.equal(downloadLinkIn('hello'), '');
   assert.equal(downloadLinkIn(''), '');
 });
+
+test('plainNotes: release Markdown becomes readable plain text', () => {
+  const { plainNotes } = require('../src/core/util');
+  const md = '## What\'s new\r\n\r\n- **Queue** priority\r\n* See [docs](https://x.y) and `code`\r\n\r\n\r\n\r\n<!-- hidden -->\r\n![img](a.png)\r\nEnd  ';
+  assert.equal(plainNotes(md), "What's new\n\n\u2022 Queue priority\n\u2022 See docs and code\n\nEnd");
+  assert.equal(plainNotes(''), '');
+  assert.equal(plainNotes('x'.repeat(50), 10).length, 10);
+});

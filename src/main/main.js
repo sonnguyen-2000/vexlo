@@ -10,7 +10,7 @@ const { EngineClient } = require('../core/engine-client');
 const { createApi } = require('../core/api');
 const { folderFor } = require('../core/category');
 const { findDuplicate } = require('../core/dupes');
-const { uniquePath, downloadLinkIn } = require('../core/util');
+const { uniquePath, downloadLinkIn, plainNotes } = require('../core/util');
 const { dueActions, effectiveLimitKB } = require('../core/schedule');
 const { execFile } = require('child_process');
 const I18N = require('../renderer/i18n');
@@ -504,11 +504,29 @@ function registerIpc() {
   });
   ipcMain.handle('app:info', () => appInfo());
   ipcMain.handle('update:check', () => checkUpdateNow());
-  ipcMain.handle('app:releaseNotes', () => {
+  const releaseRepo = () => {
     const pub = ((require('../../package.json').build || {}).publish || [])[0] || {};
-    if (!pub.owner || /^YOUR_/.test(pub.owner) || !pub.repo) { return false; }
+    return !pub.owner || /^YOUR_/.test(pub.owner) || !pub.repo ? null : pub;
+  };
+  ipcMain.handle('app:releaseNotes', () => {
+    const pub = releaseRepo();
+    if (!pub) { return false; }
     shell.openExternal(`https://github.com/${pub.owner}/${pub.repo}/releases/tag/v${VERSION}`);
     return true;
+  });
+  // The text of this version's GitHub release for the "What's new" window; null when it cannot be read.
+  ipcMain.handle('app:whatsNew', async () => {
+    const pub = releaseRepo();
+    if (!pub) { return null; }
+    try {
+      const res = await net.fetch(`https://api.github.com/repos/${pub.owner}/${pub.repo}/releases/tags/v${VERSION}`, {
+        headers: { Accept: 'application/vnd.github+json', 'User-Agent': 'Vexlo' }, signal: AbortSignal.timeout(8000),
+      });
+      if (!res.ok) { return null; }
+      const j = await res.json();
+      const text = plainNotes(j.body);
+      return text ? { version: VERSION, text, url: j.html_url || '' } : null;
+    } catch { return null; }
   });
   ipcMain.handle('app:exportLog', async (e) => {
     // One plain-text file the user can attach to a bug report. No pairing code and no download links in it.

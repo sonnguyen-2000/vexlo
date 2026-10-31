@@ -592,11 +592,24 @@
   };
   bridge.appInfo().then((i) => {
     ver = i.version;
-    if (i.justUpdated) { toast(T('Vexlo đã được cập nhật lên bản {v}.', { v: i.justUpdated.to })); }
+    if (i.justUpdated) { toast(T('Vexlo đã được cập nhật lên bản {v}.', { v: i.justUpdated.to })); showNews(true); }
   }).catch(() => {});
   bridge.on('update:restarting', (u) => toast(T('Đang cập nhật lên bản {v}. Vexlo sẽ tự khởi động lại sau vài giây.', { v: u && u.version })));
   bridge.on('update:status', showUpd);
-  $('bNotes').addEventListener('click', async () => { if (!(await bridge.releaseNotes())) { toast(T('Chưa có trang phát hành cho bản này.'), true); } });
+  // "What's new": the release text inside the app; if it cannot be read (offline, no release) fall back to the web page.
+  async function showNews(quiet) {
+    const n = await bridge.whatsNew();
+    if (!n) {
+      if (!quiet && !(await bridge.releaseNotes())) { toast(T('Chưa có trang phát hành cho bản này.'), true); }
+      return;
+    }
+    $('nTitle').textContent = T('Có gì mới trong Vexlo {v}', { v: n.version });
+    $('nText').textContent = n.text;
+    $('nWeb').style.display = n.url ? '' : 'none';
+    $('nWeb').onclick = () => bridge.releaseNotes();
+    openModal('mNew');
+  }
+  $('bNotes').addEventListener('click', () => showNews(false));
   $('bLog').addEventListener('click', async () => {
     const f = await bridge.exportLog();
     $('logMsg').textContent = f ? T('Đã lưu nhật ký: {f}', { f }) : '';

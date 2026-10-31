@@ -27,6 +27,7 @@ contextBridge.exposeInMainWorld('vexlo', {
   appInfo: call('app:info'),
   updateCheck: call('update:check'),
   releaseNotes: call('app:releaseNotes'),
+  whatsNew: call('app:whatsNew'),
   exportLog: call('app:exportLog'),
   updateStatus: call('update:status'),
   updateInstall: call('update:install'),

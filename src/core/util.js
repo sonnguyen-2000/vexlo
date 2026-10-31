@@ -117,7 +117,18 @@ function downloadLinkIn(text) {
   return DL_EXT.test(u.pathname) ? t : '';
 }
 
+/** GitHub release text (Markdown) turned into plain readable lines for the "What's new" window. */
+function plainNotes(md, max = 4000) {
+  let t = String(md || '').replace(/\r\n?/g, '\n');
+  t = t.replace(/<!--[\s\S]*?-->/g, '').replace(/<[^>]+>/g, '');
+  t = t.replace(/!\[[^\]]*\]\([^)]*\)/g, '').replace(/\[([^\]]+)\]\([^)]*\)/g, '$1');
+  t = t.replace(/^[ \t]{0,3}#{1,6}[ \t]*/gm, '').replace(/^[ \t]*[-*+][ \t]+/gm, '\u2022 ');
+  t = t.replace(/(\*\*|__)(.*?)\1/g, '$2').replace(/`([^`]*)`/g, '$1');
+  t = t.replace(/[ \t]+$/gm, '').replace(/\n{3,}/g, '\n\n').trim();
+  return t.length > max ? t.slice(0, max - 1).trimEnd() + '\u2026' : t;
+}
+
 module.exports = {
-  downloadLinkIn, sanitizeFilename, filenameFromContentDisposition, filenameFromUrl, extFromMime,
+  plainNotes, downloadLinkIn, sanitizeFilename, filenameFromContentDisposition, filenameFromUrl, extFromMime,
   pickFilename, uniquePath, sleep, atomicWriteJson,
 };
