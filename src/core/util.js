@@ -193,6 +193,37 @@ function extractCommands(file, dest, { platform = process.platform, env = proces
 }
 
 /**
+ * The command that lists an archive with the size of every file, so the extraction window can show a real percentage.
+ * Only UnRAR (rar) and 7-Zip can do it; null means "no percentage, show a moving bar instead".
+ */
+function listCommand(file, { platform = process.platform, env = process.env, exists = fs.existsSync, password = '' } = {}) {
+  if (platform !== 'win32') { return null; }
+  const roots = [...new Set([env.ProgramFiles, env['ProgramFiles(x86)'], env.ProgramW6432, 'C:\\Program Files', 'C:\\Program Files (x86)'].filter(Boolean))];
+  const find = (rel) => { for (const r of roots) { const f = path.win32.join(r, rel); if (exists(f)) { return f; } } return ''; };
+  const pw = String(password || '');
+  const ext = ((/\.([a-z0-9]+)$/i.exec(file) || [])[1] || '').toLowerCase();
+  const unrar = find('WinRAR\\UnRAR.exe');
+  const seven = find('7-Zip\\7z.exe');
+  if (ext === 'rar' && unrar) { return { name: 'unrar', exe: unrar, args: ['lt', '-y', pw ? `-p${pw}` : '-p-', file] }; }
+  if (seven) { return { name: '7zip', exe: seven, args: ['l', '-slt', '-y', ...(pw ? [`-p${pw}`] : []), file] }; }
+  return null;
+}
+
+/** Total unpacked size in bytes from the output of listCommand's program (0 when it cannot be read). */
+function parseListedTotal(tool, out) {
+  const text = String(out || '');
+  let total = 0;
+  if (tool === 'unrar') {
+    for (const m of text.matchAll(/^\s*Size:\s*(\d+)\s*$/gm)) { total += Number(m[1]); }
+  } else {
+    const i = text.indexOf('----------'); // before this line "Size =" is the archive itself
+    if (i < 0) { return 0; }
+    for (const m of text.slice(i).matchAll(/^Size = (\d+)\s*$/gm)) { total += Number(m[1]); }
+  }
+  return Number.isFinite(total) ? total : 0;
+}
+
+/**
  * A short, plain reason for a failed extraction, from what the programs reported.
  * @param {{name:string, code:(number|string), msg:string}[]} attempts
  * @returns {'password'|'corrupt'|'format'|'missing'|'space'|'unknown'}
@@ -209,6 +240,6 @@ function explainExtractFailure(attempts) {
 }
 
 module.exports = {
-  explainExtractFailure, extractCommands, isArchive, extractDirFor, parseImportList, plainNotes, downloadLinkIn, sanitizeFilename, filenameFromContentDisposition, filenameFromUrl, extFromMime,
+  listCommand, parseListedTotal, explainExtractFailure, extractCommands, isArchive, extractDirFor, parseImportList, plainNotes, downloadLinkIn, sanitizeFilename, filenameFromContentDisposition, filenameFromUrl, extFromMime,
   pickFilename, uniquePath, sleep, atomicWriteJson,
 };

@@ -11,7 +11,7 @@ const { createApi } = require('../core/api');
 const { folderFor } = require('../core/category');
 const { findDuplicate } = require('../core/dupes');
 const {
-  uniquePath, downloadLinkIn, plainNotes, parseImportList, isArchive, extractDirFor, extractCommands, explainExtractFailure,
+  uniquePath, downloadLinkIn, plainNotes, parseImportList, isArchive, extractDirFor, extractCommands, explainExtractFailure, listCommand, parseListedTotal,
 } = require('../core/util');
 const { dueActions, effectiveLimitKB } = require('../core/schedule');
 const { execFile } = require('child_process');
@@ -133,13 +133,18 @@ function applyLimit() {
 
 // ---- extract an archive next to itself, into a new folder named after it (Windows ships tar.exe, which reads zip/7z/tar/rar...).
 // tar refuses entries that would land outside the target folder, so a hostile archive cannot overwrite other files.
-function extractArchive(file, password = '') {
+function extractArchive(file, password = '', hooks = {}) {
   return new Promise((resolve) => {
     const dest = extractDirFor(file);
     try { fs.mkdirSync(dest, { recursive: true }); } catch (e) { return resolve({ ok: false, error: e.message, attempts: [] }); }
+    if (hooks.onDest) { hooks.onDest(dest); }
     const cmds = extractCommands(file, dest, { password }); // WinRAR / 7-Zip when installed (better for .rar and .7z), then tar
     const attempts = [];
     const next = (i) => {
+      if (hooks.cancelled && hooks.cancelled()) {
+        try { fs.rmSync(dest, { recursive: true, force: true }); } catch { /* ignore */ }
+        return resolve({ ok: false, canceled: true, attempts });
+      }
       if (i >= cmds.length) {
         try { fs.rmSync(dest, { recursive: true, force: true }); } catch { /* the folder is new and ours: remove the leftovers of a failed try */ }
         const detail = attempts.map((a) => `${a.name} (${a.code}): ${a.msg}`).join('\n');
@@ -156,6 +161,7 @@ function extractArchive(file, password = '') {
         attempts.push({ name: c.name, code: typeof err.code === 'number' ? err.code : (err.code || err.signal || '?'), msg: String(line).slice(0, 200) });
         return next(i + 1);
       });
+      if (hooks.onStart) { hooks.onStart(c.name, child); }
       if (child.stdin) { child.stdin.on('error', () => {}); child.stdin.end(); } // never wait for a password prompt
     };
     next(0);
@@ -169,18 +175,111 @@ const EXTRACT_REASON = {
   space: 'Ổ đĩa không đủ chỗ trống để giải nén.',
   unknown: 'Không rõ nguyên nhân. Hãy thử mở file bằng WinRAR để xem thông báo lỗi.',
 };
-async function extractAndTell(file, { password = '', quiet = false } = {}) {
-  const r = await extractArchive(file, password);
-  if (r.ok || !quiet) {
-    if (settings.notify && Notification.isSupported()) {
-      const n = new Notification({
-        title: r.ok ? T('Đã giải nén') : T('Không giải nén được'), body: r.ok ? path.basename(r.dir) : `${path.basename(file)}: ${T(EXTRACT_REASON[r.reason] || EXTRACT_REASON.unknown)}`, silent: true,
-      });
-      if (r.ok) { n.on('click', () => shell.openPath(r.dir)); }
-      n.show();
+// ---- extraction window: what is being extracted, how far it is, and when it is finished
+const extractJobs = new Map(); // webContents id -> job
+
+/** Bytes inside a folder (what has been extracted so far). Walks the tree without blocking, capped for huge trees. */
+async function dirSize(root, cap = 200000) {
+  let total = 0;
+  let seen = 0;
+  const stack = [root];
+  while (stack.length && seen < cap) {
+    const d = stack.pop();
+    let list = [];
+    try { list = await fs.promises.readdir(d, { withFileTypes: true }); } catch { continue; }
+    for (const e of list) {
+      seen++;
+      const f = path.join(d, e.name);
+      if (e.isDirectory()) { stack.push(f); } else { try { total += (await fs.promises.stat(f)).size; } catch { /* vanished */ } }
     }
   }
-  return r;
+  return total;
+}
+
+/** Total unpacked size read from the archive's listing (0 when the tools cannot tell: the window then shows a moving bar). */
+function listTotal(file, password) {
+  const c = listCommand(file, { password });
+  if (!c) { return Promise.resolve(0); }
+  return new Promise((resolve) => {
+    const child = execFile(c.exe, c.args, { timeout: 90 * 1000, windowsHide: true, maxBuffer: 256 * 1024 * 1024 }, (err, out) => {
+      resolve(err && err.code !== 1 ? 0 : parseListedTotal(c.name, out));
+    });
+    if (child.stdin) { child.stdin.on('error', () => {}); child.stdin.end(); }
+  });
+}
+
+function createExtractJob(file, auto) {
+  const win = new BrowserWindow(baseOptions({
+    width: 440, height: 200, useContentSize: true, resizable: false, minimizable: true, maximizable: false, title: T('Giải nén'),
+  }));
+  win.setMenu(null);
+  secureWindow(win);
+  const job = {
+    file, auto, win, child: null, cancelled: false, dest: '', poll: 0, shown: false, showTimer: 0,
+    state: { name: path.basename(file), phase: 'prepare', total: 0, done: 0, percent: -1, startedAt: Date.now(), endedAt: 0, tool: '', reasonText: '', tech: '' },
+  };
+  const wcId = win.webContents.id;
+  extractJobs.set(wcId, job);
+  win.loadFile(path.join(RENDERER, 'extract.html'), pageOpts()).catch(() => {});
+  // A small archive finishes at once: only show the window when it takes a moment.
+  job.showTimer = setTimeout(() => { reveal(job); }, 700);
+  win.on('closed', () => { extractJobs.delete(wcId); clearTimeout(job.showTimer); });
+  return job;
+}
+function reveal(job) {
+  if (job.shown || job.win.isDestroyed()) { return; }
+  job.shown = true;
+  popOnTop(job.win);
+  job.win.showInactive();
+}
+function pushExtract(job) {
+  if (!job.win.isDestroyed()) { job.win.webContents.send('extract:update', job.state); }
+}
+
+/** Extract `file` next to itself with a progress window. Resolves with the extractArchive result (plus needPassword for the caller). */
+async function runExtract(file, { password = '', auto = false } = {}) {
+  const job = createExtractJob(file, auto);
+  const st = job.state;
+  try {
+    st.total = await listTotal(file, password);
+    st.phase = 'extract';
+    pushExtract(job);
+    job.poll = setInterval(async () => {
+      if (!job.dest || job.win.isDestroyed()) { return; }
+      st.done = await dirSize(job.dest);
+      st.percent = st.total ? Math.min(99, Math.floor((st.done / st.total) * 100)) : -1;
+      pushExtract(job);
+    }, 800);
+    const r = await extractArchive(file, password, {
+      onDest: (d) => { job.dest = d; },
+      onStart: (name, child) => { job.child = child; st.tool = name; pushExtract(job); },
+      cancelled: () => job.cancelled,
+    });
+    clearInterval(job.poll);
+    st.endedAt = Date.now();
+    const gone = job.win.isDestroyed();
+    if (r.ok) {
+      st.phase = 'done'; st.percent = 100; st.tool = r.with || st.tool; job.dest = r.dir;
+      st.done = await dirSize(r.dir);
+      if (gone || !job.shown) {
+        if (!gone) { job.win.destroy(); }
+        if (settings.notify && Notification.isSupported()) {
+          const n = new Notification({ title: T('Đã giải nén'), body: path.basename(r.dir), silent: true });
+          n.on('click', () => shell.openPath(r.dir));
+          n.show();
+        }
+      } else { pushExtract(job); }
+      return r;
+    }
+    if (r.canceled || (r.reason === 'password' && !auto)) { if (!gone) { job.win.destroy(); } return r; } // the main window asks for the password
+    st.phase = 'error';
+    st.reasonText = EXTRACT_REASON[r.reason] || EXTRACT_REASON.unknown;
+    st.tech = (r.attempts || []).map((a) => `${a.name} (${a.code}): ${a.msg}`).join('\n');
+    if (gone) {
+      if (settings.notify && Notification.isSupported()) { new Notification({ title: T('Không giải nén được'), body: `${path.basename(file)}: ${T(st.reasonText)}`, silent: true }).show(); }
+    } else { reveal(job); pushExtract(job); }
+    return r;
+  } finally { clearInterval(job.poll); }
 }
 
 // ---- proxy: off, the Windows/system one, or typed by the user. Only HTTP proxies are used (not SOCKS).
@@ -671,25 +770,30 @@ function registerIpc() {
     return { added, skipped, total: list.length };
   });
   // Windows Defender scan of one downloaded file (report only: nothing is removed without the user deciding).
-  ipcMain.handle('dl:extract', async (e, id, password) => {
+  ipcMain.handle('dl:extract', async (_e, id, password) => {
     const t = manager.get(id);
     const file = t && t.state.path;
     if (!file || !fs.existsSync(file) || !isArchive(file)) { return { ok: false, error: 'not an archive' }; }
     const pw = typeof password === 'string' ? password.slice(0, 256) : '';
-    const r = await extractAndTell(file, { password: pw, quiet: true });
+    const r = await runExtract(file, { password: pw });
     if (r.ok) { return r; }
-    // An encrypted archive: the window asks for the password (again, when the one given was wrong). Anything else is explained here.
+    // An encrypted archive: the main window asks for the password (again, when the one given was wrong). Anything else is shown in the extraction window.
     if (r.reason === 'password') { return { ok: false, needPassword: true, wrongPassword: !!pw, handled: true }; }
-    const win = BrowserWindow.fromWebContents(e.sender) || undefined;
-    const tech = (r.attempts || []).map((a) => `${a.name} (${a.code}): ${a.msg}`).join('\n');
-    const box = await dialog.showMessageBox(win, {
-      type: 'warning', title: T('Giải nén'), message: T('Không giải nén được'),
-      detail: `${T(EXTRACT_REASON[r.reason] || EXTRACT_REASON.unknown)}${tech ? '\n\n' + tech : ''}`,
-      buttons: [T('Mở thư mục chứa tệp'), T('Đóng')], defaultId: 1, cancelId: 1, noLink: true,
-    });
-    if (box.response === 0) { shell.showItemInFolder(file); }
     return { ...r, handled: true };
   });
+  ipcMain.handle('extract:get', (e) => { const j = extractJobs.get(e.sender.id); return j ? j.state : null; });
+  ipcMain.handle('extract:cancel', (e) => {
+    const j = extractJobs.get(e.sender.id);
+    if (j) { j.cancelled = true; try { if (j.child) { j.child.kill(); } } catch { /* already gone */ } }
+    return true;
+  });
+  ipcMain.handle('extract:folder', (e) => {
+    const j = extractJobs.get(e.sender.id);
+    if (!j) { return false; }
+    if (j.state.phase === 'done' && j.dest) { shell.openPath(j.dest); } else { shell.showItemInFolder(j.file); }
+    return true;
+  });
+  ipcMain.handle('extract:close', (e) => { const j = extractJobs.get(e.sender.id); if (j && !j.win.isDestroyed()) { j.win.close(); } return true; });
   ipcMain.handle('dl:scan', async (e, id) => {
     const t = manager.get(id);
     const file = t && t.state.path;
@@ -886,7 +990,7 @@ function wireManager() {
     forgetRetry(s.id);
     broadcast('dl:update', s);
     if (afterAll !== 'none') { afterArmed++; checkAfterAll(); }
-    if (settings.autoExtract && s.path && s.kind === 'file' && isArchive(s.path)) { extractAndTell(s.path); }
+    if (settings.autoExtract && s.path && s.kind === 'file' && isArchive(s.path)) { runExtract(s.path, { auto: true }); }
     if (settings.notify && Notification.isSupported()) {
       const n = new Notification({ title: T('Đã tải xong'), body: s.filename, silent: false });
       n.on('click', () => { if (s.path) { shell.showItemInFolder(s.path); } });

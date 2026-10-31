@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src 'self'; script-src 'self'">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Giải nén</title>
+<link rel="stylesheet" href="styles.css">
+<link rel="stylesheet" href="progress.css">
+<link rel="stylesheet" href="extract.css">
+</head>
+<body>
+<svg class="sprite" aria-hidden="true">
+  <symbol id="i-archive" viewBox="0 0 24 24"><polyline points="21 8 21 21 3 21 3 8"/><rect x="1" y="3" width="22" height="5"/><line x1="10" y1="12" x2="14" y2="12"/></symbol>
+</svg>
+
+<main class="pw" id="pw">
+  <div class="head">
+    <span class="badge" data-cat="archive"><svg class="ic"><use href="#i-archive"/></svg></span>
+    <div class="headtxt">
+      <div class="name" id="name">…</div>
+      <div class="meta" id="meta">Đang chuẩn bị…</div>
+    </div>
+    <div class="pct" id="pct"></div>
+  </div>
+
+  <div class="bar ind" id="bar"><i id="fill"></i></div>
+
+  <dl class="stats three" id="stats">
+    <div><dt>Đã giải nén</dt><dd id="got">—</dd></div>
+    <div><dt>Thời gian</dt><dd id="time">0:00</dd></div>
+    <div><dt>Công cụ</dt><dd id="tool">—</dd></div>
+  </dl>
+
+  <div class="ask hidden" id="err">
+    <div class="asktxt" id="errTxt"></div>
+    <pre class="tech" id="tech"></pre>
+  </div>
+
+  <div class="foot">
+    <span class="hint" id="note">Có thể đóng cửa sổ này, việc giải nén vẫn chạy.</span>
+    <div class="actions" id="actRun">
+      <button class="btn ghost" id="cancel" type="button">Hủy</button>
+      <button class="btn" id="hide" type="button">Ẩn</button>
+    </div>
+    <div class="actions hidden" id="actDone">
+      <button class="btn primary" id="folder" type="button">Mở thư mục</button>
+      <button class="btn ghost" id="close" type="button">Đóng</button>
+    </div>
+  </div>
+</main>
+
+<script src="i18n.js"></script>
+<script src="common.js"></script>
+<script src="extract.js"></script>
+</body>
+</html>

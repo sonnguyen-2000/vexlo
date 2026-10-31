@@ -1,0 +1,9 @@
+/* Extraction progress window. Builds on progress.css / styles.css. */
+.stats.three{grid-template-columns:repeat(3,minmax(0,1fr))}
+.bar.ind i{width:34%;animation:exind 1.15s ease-in-out infinite alternate;transition:none}
+.bar.done i{background:linear-gradient(90deg,#18c2d6,#2fd29a)}
+@keyframes exind{from{margin-left:0}to{margin-left:66%}}
+.tech{margin:0;max-height:70px;overflow:auto;font:11px/1.45 ui-monospace,Consolas,monospace;color:var(--mut);white-space:pre-wrap;word-break:break-all;user-select:text}
+.asktxt{white-space:normal}
+.foot .hint{flex:1;min-width:0;font-size:11.5px;color:var(--mut)}
+@media (prefers-reduced-motion:reduce){.bar.ind i{animation:none;margin-left:33%}}

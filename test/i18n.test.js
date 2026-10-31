@@ -120,3 +120,21 @@ test('extractCommands with a password: only WinRAR / 7-Zip get it, tar is left o
   assert.ok(extractCommands('D:\\a.rar', 'D:\\out', { platform: 'win32', env, exists: all })[0].args.includes('-p-'));
   assert.deepEqual(extractCommands('/a.rar', '/o', { platform: 'linux', password: 'x' }), []);
 });
+
+test('listing an archive: the command to use and the total size read from its output', () => {
+  const { listCommand, parseListedTotal } = require('../src/core/util');
+  const env = { ProgramFiles: 'C:\\Program Files' };
+  const UR = 'C:\\Program Files\\WinRAR\\UnRAR.exe';
+  const SZ = 'C:\\Program Files\\7-Zip\\7z.exe';
+  const has = (...f) => (x) => f.includes(x);
+  assert.equal(listCommand('D:\\a.rar', { platform: 'win32', env, exists: has(UR, SZ) }).name, 'unrar');
+  assert.deepEqual(listCommand('D:\\a.rar', { platform: 'win32', env, exists: has(UR), password: 'pw' }).args, ['lt', '-y', '-ppw', 'D:\\a.rar']);
+  assert.equal(listCommand('D:\\a.zip', { platform: 'win32', env, exists: has(UR, SZ) }).name, '7zip');
+  assert.equal(listCommand('D:\\a.zip', { platform: 'win32', env, exists: has(UR) }), null);
+  assert.equal(listCommand('/a.rar', { platform: 'linux' }), null);
+  const rar = '        Name: a.txt\n        Type: File\n        Size: 1000\n Packed size: 400\n\n        Name: dir\n        Type: Directory\n        Size: 0\n\n        Name: b.bin\n        Size: 2500\n';
+  assert.equal(parseListedTotal('unrar', rar), 3500);
+  const sz = 'Path = a.7z\nType = 7z\nSize = 777\n\n----------\nPath = a.txt\nSize = 10\nPacked Size = 5\n\nPath = b.bin\nSize = 90\n';
+  assert.equal(parseListedTotal('7zip', sz), 100);
+  assert.equal(parseListedTotal('7zip', 'nothing'), 0);
+});
