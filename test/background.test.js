@@ -541,3 +541,17 @@ test('refresh link: a tab opened by the app (marker in the address) is recognise
   assert.deepEqual(plain(bg.calls.closed || []), [9]);
   await api.close();
 });
+
+test('refresh link: several captures of the same page (two files) send only one download', async () => {
+  const manager = fakeManager();
+  // the app keeps asking for this page: only the first capture may answer it
+  const api = createApi(manager, { port: 0, getRefreshPending: () => [{ page: 'https://site.example/watch/42', kind: 'file' }] });
+  await api.listen();
+  opened.push(api);
+  const bg = await loadBackground({ port: api.port, tabs: TAB });
+  await sniff(bg, { tabId: 5, url: 'https://cdn.example/v/a.mp4?tok=1', resp: { 'content-type': 'video/mp4', 'content-length': String(9 * MB) } });
+  await sniff(bg, { tabId: 5, url: 'https://cdn.example/v/b.mp4?tok=2', resp: { 'content-type': 'video/mp4', 'content-length': String(9 * MB) } });
+  await sleep(400);
+  assert.equal(manager.added.length, 1);
+  await api.close();
+});

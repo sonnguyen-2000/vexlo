@@ -214,6 +214,8 @@ async function addMedia(tabId, d, c, sent) {
 // that page, the fresh link is sent straight away (the app replaces the failed attempt).
 let refreshCache = { at: 0, pages: [] };
 const stripHash = (u) => String(u || '').split('#')[0];
+// One refresh per page and kind: a page often exposes several playlists / files, and each of them would otherwise start its own download.
+const refreshInFlight = new Map(); // "page|kind" -> when it was sent
 async function maybeAutoRefresh(tabId, item) {
   try {
     await settingsReady;
@@ -224,6 +226,9 @@ async function maybeAutoRefresh(tabId, item) {
     }
     const hit = refreshCache.pages.find((p) => stripHash(p.page) === stripHash(item.page) && p.kind === item.kind);
     if (!hit) { return; }
+    const key = stripHash(item.page) + '|' + item.kind;
+    if (Date.now() - (refreshInFlight.get(key) || 0) < 15000) { return; } // another capture of this page is already being sent
+    refreshInFlight.set(key, Date.now());
     item.autoSent = true;
     refreshCache = { at: 0, pages: [] }; // ask the app again next time: this request is now taken
     if (item.kind === 'hls') { await new Promise((ok) => setTimeout(ok, 1500)); } // let the playlist inspection finish first

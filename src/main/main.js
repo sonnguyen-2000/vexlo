@@ -302,11 +302,22 @@ function takeRefresh(page) {
   return '';
 }
 
+// A page can expose several links at once (master + media playlist, two qualities...). Only the first capture after "Refresh link" counts.
+const justRefreshed = new Map(); // "page|kind" -> { at, id }
+const refreshKey = (page, kind) => stripHash(page) + '|' + kind;
+
 function handleExternalAdd(items) {
   const ask = settings.confirm && items.length <= 3;
   return items.map((it) => {
-    const refreshed = takeRefresh(it.meta && it.meta.page ? it.meta.page : it.page);
+    const pageOf = it.meta && it.meta.page ? it.meta.page : it.page;
+    const refreshed = takeRefresh(pageOf);
     const kind = detectKind(it.url, it.kind);
+    const rk = refreshKey(pageOf, kind);
+    if (refreshed) { justRefreshed.set(rk, { at: Date.now(), id: '' }); }
+    else {
+      const j = justRefreshed.get(rk);
+      if (j && Date.now() - j.at < 20000 && j.id) { return j.id; } // same page, same kind, moments after a refresh: not a second download
+    }
     const dir = categoryDir(it.filename || it.url, kind);
     const dup = findDuplicate(manager.list(), { url: it.url, filename: it.filename, dir, page: it.page, kind }, { exists: fs.existsSync });
     if (dup && dup.type === 'active') { notifyDuplicate(dup.task); return dup.task.id; } // already in the list: never download twice
@@ -316,6 +327,7 @@ function handleExternalAdd(items) {
     const id = manager.add({
       ...it, filename, replaceId, dir, connections: settings.connections, start: !askNow, pending: askNow,
     });
+    if (refreshed) { justRefreshed.set(rk, { at: Date.now(), id }); }
     if (askNow) { openConfirm(id, { replaced: !!replaceId }); } else if (items.length <= 3) { openProgress(id); }
     return id;
   });
