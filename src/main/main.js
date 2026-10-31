@@ -11,7 +11,7 @@ const { createApi } = require('../core/api');
 const { folderFor } = require('../core/category');
 const { findDuplicate } = require('../core/dupes');
 const {
-  uniquePath, downloadLinkIn, plainNotes, parseImportList, isArchive, extractDirFor, extractCommands,
+  uniquePath, downloadLinkIn, plainNotes, parseImportList, isArchive, extractDirFor, extractCommands, explainExtractFailure,
 } = require('../core/util');
 const { dueActions, effectiveLimitKB } = require('../core/schedule');
 const { execFile } = require('child_process');
@@ -136,18 +136,24 @@ function applyLimit() {
 function extractArchive(file) {
   return new Promise((resolve) => {
     const dest = extractDirFor(file);
-    try { fs.mkdirSync(dest, { recursive: true }); } catch (e) { return resolve({ ok: false, error: e.message }); }
+    try { fs.mkdirSync(dest, { recursive: true }); } catch (e) { return resolve({ ok: false, error: e.message, attempts: [] }); }
     const cmds = extractCommands(file, dest); // WinRAR / 7-Zip when installed (better for .rar and .7z), then tar
-    let lastError = '';
+    const attempts = [];
     const next = (i) => {
       if (i >= cmds.length) {
         try { if (!fs.readdirSync(dest).length) { fs.rmdirSync(dest); } } catch { /* leave what was extracted */ }
-        return resolve({ ok: false, error: lastError });
+        const detail = attempts.map((a) => `${a.name} (${a.code}): ${a.msg}`).join('\n');
+        netLog.push(`${new Date().toISOString().slice(11, 19)} extract failed for ${path.basename(file)}: ${detail.replace(/\n/g, ' | ')}`);
+        return resolve({ ok: false, error: attempts.length ? attempts[0].msg : '', attempts, reason: explainExtractFailure(attempts) });
       }
       const c = cmds[i];
-      const child = execFile(c.exe, c.args, { timeout: 30 * 60 * 1000, windowsHide: true }, (err, stdout, stderr) => {
-        if (!err) { return resolve({ ok: true, dir: dest, with: c.name }); }
-        lastError = String(stderr || stdout || err.message || '').split('\n').map((x) => x.trim()).find(Boolean) || lastError;
+      // maxBuffer: 7-Zip lists every file it extracts, which would overflow the default 1 MB and kill it half way
+      const child = execFile(c.exe, c.args, { timeout: 60 * 60 * 1000, windowsHide: true, maxBuffer: 256 * 1024 * 1024 }, (err, stdout, stderr) => {
+        // exit code 1 of WinRAR / 7-Zip is only a warning (for example one file could not be set to its original date)
+        if (!err || (err.code === 1 && c.name !== 'tar')) { return resolve({ ok: true, dir: dest, with: c.name }); }
+        const text = String(stderr || stdout || err.message || '').split('\n').map((x) => x.trim()).filter(Boolean);
+        const line = text.find((x) => /error|cannot|can't|unable|fail|password|crc|corrupt|unexpected|not /i.test(x)) || text[0] || err.message || '';
+        attempts.push({ name: c.name, code: typeof err.code === 'number' ? err.code : (err.code || err.signal || '?'), msg: String(line).slice(0, 200) });
         return next(i + 1);
       });
       if (child.stdin) { child.stdin.on('error', () => {}); child.stdin.end(); } // never wait for a password prompt
@@ -155,11 +161,19 @@ function extractArchive(file) {
     next(0);
   });
 }
+const EXTRACT_REASON = {
+  password: 'File nén có mật khẩu (hoặc sai mật khẩu). Vexlo chưa hỗ trợ nhập mật khẩu: hãy mở file bằng WinRAR.',
+  corrupt: 'File nén bị lỗi hoặc tải chưa trọn vẹn. Hãy thử tải lại, hoặc mở bằng WinRAR để xem chi tiết.',
+  format: 'Không nhận ra định dạng file, hoặc là một phần của bộ nhiều tệp (part1, part2...). Hãy tải đủ các phần rồi mở phần đầu bằng WinRAR.',
+  missing: 'Không tìm thấy chương trình giải nén. Hãy cài WinRAR hoặc 7-Zip.',
+  space: 'Ổ đĩa không đủ chỗ trống để giải nén.',
+  unknown: 'Không rõ nguyên nhân. Hãy thử mở file bằng WinRAR để xem thông báo lỗi.',
+};
 async function extractAndTell(file) {
   const r = await extractArchive(file);
   if (settings.notify && Notification.isSupported()) {
     const n = new Notification({
-      title: r.ok ? T('Đã giải nén') : T('Không giải nén được'), body: r.ok ? path.basename(r.dir) : `${path.basename(file)}: ${r.error || ''}`, silent: true,
+      title: r.ok ? T('Đã giải nén') : T('Không giải nén được'), body: r.ok ? path.basename(r.dir) : `${path.basename(file)}: ${T(EXTRACT_REASON[r.reason] || EXTRACT_REASON.unknown)}`, silent: true,
     });
     if (r.ok) { n.on('click', () => shell.openPath(r.dir)); }
     n.show();
@@ -655,11 +669,23 @@ function registerIpc() {
     return { added, skipped, total: list.length };
   });
   // Windows Defender scan of one downloaded file (report only: nothing is removed without the user deciding).
-  ipcMain.handle('dl:extract', async (_e, id) => {
+  ipcMain.handle('dl:extract', async (e, id) => {
     const t = manager.get(id);
     const file = t && t.state.path;
     if (!file || !fs.existsSync(file) || !isArchive(file)) { return { ok: false, error: 'not an archive' }; }
-    return extractAndTell(file);
+    const r = await extractAndTell(file);
+    if (!r.ok) {
+      const win = BrowserWindow.fromWebContents(e.sender) || undefined;
+      const tech = (r.attempts || []).map((a) => `${a.name} (${a.code}): ${a.msg}`).join('\n');
+      const box = await dialog.showMessageBox(win, {
+        type: 'warning', title: T('Giải nén'), message: T('Không giải nén được'),
+        detail: `${T(EXTRACT_REASON[r.reason] || EXTRACT_REASON.unknown)}${tech ? '\n\n' + tech : ''}`,
+        buttons: [T('Mở thư mục chứa tệp'), T('Đóng')], defaultId: 1, cancelId: 1, noLink: true,
+      });
+      if (box.response === 0) { shell.showItemInFolder(file); }
+      return { ...r, handled: true };
+    }
+    return r;
   });
   ipcMain.handle('dl:scan', async (e, id) => {
     const t = manager.get(id);

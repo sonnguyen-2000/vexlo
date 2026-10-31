@@ -435,7 +435,7 @@
       one && one.status === 'done' && /\.(zip|7z|rar|tar|tgz|tbz2|txz|gz|bz2|xz)$/i.test(one.path || one.filename || '') && [T('Giải nén tại đây'), 'i-folder', async () => {
         toast(T('Đang giải nén...'));
         const r = await bridge.extractFile(one.id);
-        if (!r.ok) { toast(T('Không giải nén được'), true); }
+        if (!r.ok && !r.handled) { toast(T('Không giải nén được'), true); }
       }],
       one && one.status === 'done' && [T('Quét virus bằng Windows Defender'), 'i-open', async () => {
         toast(T('Đang quét...'));

@@ -97,3 +97,14 @@ test('extractCommands: WinRAR and 7-Zip are used when installed, tar is always t
   assert.equal(opt('D:\\a.zip')[0].exe, 'C:\\Windows\\System32\\tar.exe');
   assert.deepEqual(names(extractCommands('/x/a.rar', '/x/a', { platform: 'linux' })), ['tar']);
 });
+
+test('explainExtractFailure: turns what the programs said into a plain reason', () => {
+  const { explainExtractFailure: why } = require('../src/core/util');
+  assert.equal(why([{ name: 'unrar', code: 11, msg: 'Incorrect password' }, { name: 'tar', code: 1, msg: 'tar: Unrecognized archive format' }]), 'password');
+  assert.equal(why([{ name: 'unrar', code: 3, msg: 'CRC failed in x.bin' }]), 'corrupt');
+  assert.equal(why([{ name: '7zip', code: 2, msg: 'ERROR: Data Error in encrypted file. Wrong password?' }]), 'password');
+  assert.equal(why([{ name: 'tar', code: 1, msg: 'tar.exe: Error opening archive: Unrecognized archive format' }]), 'format');
+  assert.equal(why([{ name: 'unrar', code: 5, msg: 'Write error' }]), 'space');
+  assert.equal(why([{ name: 'tar', code: 1, msg: 'something odd' }]), 'unknown');
+  assert.equal(why([]), 'unknown');
+});
