@@ -14,6 +14,7 @@ let manager = null;
 const CALLS = new Set(['add', 'pause', 'resume', 'remove', 'probeInfo', 'update', 'confirm', 'pauseAll', 'resumeAll', 'prioritize', 'setTaskLimit', 'setSpeedLimit', 'setMaxConcurrent', 'shutdown']);
 
 function init(opts) {
+  require('./http').setProxy(opts && opts.proxy);
   manager = new DownloadManager(opts);
   for (const name of ['update', 'added', 'removed', 'done']) { manager.on(name, (data) => post({ t: 'ev', name, data })); }
   manager.on('error', (data) => post({ t: 'ev', name: 'error', data }));
@@ -30,6 +31,7 @@ listen(async (msg) => {
     if (msg.t === 'config') {
       if (typeof msg.downloadDir === 'string') { manager.downloadDir = msg.downloadDir; }
       if (Number.isFinite(msg.connections)) { manager.connections = msg.connections; }
+      if (typeof msg.proxy === 'string') { require('./http').setProxy(msg.proxy); }
       return;
     }
     if (msg.t === 'call') {

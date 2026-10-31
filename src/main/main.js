@@ -3,7 +3,7 @@ const path = require('path');
 const fs = require('fs');
 const crypto = require('crypto');
 const {
-  app, BrowserWindow, Tray, Menu, ipcMain, dialog, shell, clipboard, Notification, nativeImage, nativeTheme, screen, net,
+  app, BrowserWindow, Tray, Menu, ipcMain, dialog, shell, clipboard, Notification, nativeImage, nativeTheme, screen, net, session,
 } = require('electron');
 const { detectKind } = require('../core/manager');
 const { EngineClient } = require('../core/engine-client');
@@ -26,7 +26,7 @@ const DEFAULTS = {
   closeToTray: true, startWithOS: false, startHidden: true, notify: true, port: 6877, token: '', deleteMode: 'ask',
   progressWindow: true, progressFloat: true, progressAutoClose: true, progressOnError: 'ask',
   scheduleEnabled: false, scheduleStart: '01:00', scheduleStop: '', scheduleDays: [0, 1, 2, 3, 4, 5, 6],
-  autoUpdate: true, language: 'auto', clipboardWatch: false,
+  autoUpdate: true, language: 'auto', clipboardWatch: false, proxyMode: 'off', proxyUrl: '',
   limitWindowEnabled: false, limitWindowFrom: '08:00', limitWindowTo: '22:00', limitWindowKB: 500,
 };
 
@@ -69,6 +69,8 @@ function clampSettings(s) {
     scheduleDays: Array.isArray(s.scheduleDays) ? [...new Set(s.scheduleDays.map(Number).filter((d) => Number.isInteger(d) && d >= 0 && d <= 6))] : DEFAULTS.scheduleDays,
     autoUpdate: s.autoUpdate !== false,
     clipboardWatch: !!s.clipboardWatch,
+    proxyMode: ['off', 'system', 'custom'].includes(s.proxyMode) ? s.proxyMode : 'off',
+    proxyUrl: typeof s.proxyUrl === 'string' ? s.proxyUrl.trim().slice(0, 300) : '',
     limitWindowEnabled: !!s.limitWindowEnabled,
     limitWindowFrom: /^([01]?\d|2[0-3]):[0-5]\d$/.test(String(s.limitWindowFrom || '')) ? String(s.limitWindowFrom) : DEFAULTS.limitWindowFrom,
     limitWindowTo: /^([01]?\d|2[0-3]):[0-5]\d$/.test(String(s.limitWindowTo || '')) ? String(s.limitWindowTo) : DEFAULTS.limitWindowTo,
@@ -126,6 +128,22 @@ function applyLimit() {
   if (kb !== appliedLimit) { appliedLimit = kb; manager.setSpeedLimit(kb * 1024); }
 }
 
+// ---- proxy: off, the Windows/system one, or typed by the user. Only HTTP proxies are used (not SOCKS).
+let proxyTick = 0;
+async function applyProxy() {
+  if (!manager) { return; }
+  let url = '';
+  if (settings.proxyMode === 'custom') { url = settings.proxyUrl; }
+  else if (settings.proxyMode === 'system') {
+    try {
+      const r = await session.defaultSession.resolveProxy('https://www.example.com');
+      const m = /^\s*(?:PROXY|HTTPS)\s+([^;\s]+)/i.exec(r || ''); // "PROXY host:port; DIRECT"; SOCKS or DIRECT mean no proxy here
+      url = m ? m[1] : '';
+    } catch { url = ''; }
+  }
+  if (manager && manager.proxy !== url) { manager.proxy = url; }
+}
+
 function applySettings(prev) {
   manager.downloadDir = settings.downloadDir;
   manager.connections = settings.connections;
@@ -135,6 +153,7 @@ function applySettings(prev) {
   try { app.setLoginItemSettings({ openAtLogin: settings.startWithOS, path: process.execPath, args: settings.startHidden ? ['--hidden'] : [] }); } catch { /* unsupported platform */ }
   if (!prev || prev.port !== settings.port || prev.token !== settings.token) { startApi(); }
   setClipboardWatch(settings.clipboardWatch);
+  applyProxy();
 }
 
 // ---- optional: offer to download when a file link is copied (off by default, polls only while enabled)
@@ -670,6 +689,7 @@ const schedState = {};
 function runSchedule() {
   if (!manager) { return; }
   applyLimit();
+  if (settings.proxyMode === 'system' && ++proxyTick % 15 === 0) { applyProxy(); } // the system proxy can change (VPN on/off)
   const acts = dueActions(new Date(), {
     enabled: settings.scheduleEnabled, start: settings.scheduleStart, stop: settings.scheduleStop, days: settings.scheduleDays,
   }, schedState);

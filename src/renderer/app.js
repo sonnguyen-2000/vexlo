@@ -560,6 +560,9 @@
     $('sConn').value = settings.connections;
     $('sMax').value = settings.maxConcurrent;
     $('sLimit').value = settings.speedLimitKB;
+    $('sProxyMode').value = settings.proxyMode || 'off';
+    $('sProxyUrl').value = settings.proxyUrl || '';
+    $('sProxyUrl').style.display = $('sProxyMode').value === 'custom' ? '' : 'none';
     $('sLimWin').checked = !!settings.limitWindowEnabled;
     $('sLimFrom').value = settings.limitWindowFrom || '08:00';
     $('sLimTo').value = settings.limitWindowTo || '22:00';
@@ -616,6 +619,7 @@
     $('nWeb').onclick = () => bridge.releaseNotes();
     openModal('mNew');
   }
+  $('sProxyMode').addEventListener('change', () => { $('sProxyUrl').style.display = $('sProxyMode').value === 'custom' ? '' : 'none'; });
   $('sStart').addEventListener('change', () => { $('sHidden').disabled = !$('sStart').checked; });
   $('bNotes').addEventListener('click', () => showNews(false));
   $('bLog').addEventListener('click', async () => {
@@ -647,7 +651,7 @@
       scheduleEnabled: $('sSchOn').checked, scheduleStart: $('sSchStart').value, scheduleStop: $('sSchStop').value,
       scheduleDays: [0, 1, 2, 3, 4, 5, 6].filter((d) => $('sDay' + d).checked), deleteMode: $('sDelete').value,
       closeToTray: $('sTray').checked, startWithOS: $('sStart').checked, startHidden: $('sHidden').checked, connections: Number($('sConn').value),
-      maxConcurrent: Number($('sMax').value), speedLimitKB: Number($('sLimit').value), limitWindowEnabled: $('sLimWin').checked, limitWindowFrom: $('sLimFrom').value, limitWindowTo: $('sLimTo').value, limitWindowKB: Number($('sLimKB').value), port: Number($('sPort').value),
+      maxConcurrent: Number($('sMax').value), speedLimitKB: Number($('sLimit').value), proxyMode: $('sProxyMode').value, proxyUrl: $('sProxyUrl').value.trim(), limitWindowEnabled: $('sLimWin').checked, limitWindowFrom: $('sLimFrom').value, limitWindowTo: $('sLimTo').value, limitWindowKB: Number($('sLimKB').value), port: Number($('sPort').value),
     });
     closeModals();
     toast(T('Đã lưu tùy chọn'));
