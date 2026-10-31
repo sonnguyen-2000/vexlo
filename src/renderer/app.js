@@ -550,6 +550,8 @@
     $('sDelete').value = settings.deleteMode || 'ask';
     $('sTray').checked = !!settings.closeToTray;
     $('sStart').checked = !!settings.startWithOS;
+    $('sHidden').checked = settings.startHidden !== false;
+    $('sHidden').disabled = !$('sStart').checked;
     $('sConn').value = settings.connections;
     $('sMax').value = settings.maxConcurrent;
     $('sLimit').value = settings.speedLimitKB;
@@ -609,6 +611,7 @@
     $('nWeb').onclick = () => bridge.releaseNotes();
     openModal('mNew');
   }
+  $('sStart').addEventListener('change', () => { $('sHidden').disabled = !$('sStart').checked; });
   $('bNotes').addEventListener('click', () => showNews(false));
   $('bLog').addEventListener('click', async () => {
     const f = await bridge.exportLog();
@@ -627,7 +630,7 @@
       downloadDir: $('sDir').value.trim(), categorize: $('sCat').checked, confirm: $('sConfirm').checked, notify: $('sNotify').checked, language: $('sLang').value, progressWindow: $('sProg').checked, progressFloat: $('sFloat').checked, progressOnError: $('sOnErr').value, autoUpdate: $('sUpd').checked, clipboardWatch: $('sClip').checked,
       scheduleEnabled: $('sSchOn').checked, scheduleStart: $('sSchStart').value, scheduleStop: $('sSchStop').value,
       scheduleDays: [0, 1, 2, 3, 4, 5, 6].filter((d) => $('sDay' + d).checked), deleteMode: $('sDelete').value,
-      closeToTray: $('sTray').checked, startWithOS: $('sStart').checked, connections: Number($('sConn').value),
+      closeToTray: $('sTray').checked, startWithOS: $('sStart').checked, startHidden: $('sHidden').checked, connections: Number($('sConn').value),
       maxConcurrent: Number($('sMax').value), speedLimitKB: Number($('sLimit').value), limitWindowEnabled: $('sLimWin').checked, limitWindowFrom: $('sLimFrom').value, limitWindowTo: $('sLimTo').value, limitWindowKB: Number($('sLimKB').value), port: Number($('sPort').value),
     });
     closeModals();

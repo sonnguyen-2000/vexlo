@@ -23,7 +23,7 @@ const EXT_DIR = app.isPackaged ? path.join(process.resourcesPath, 'extension') :
 
 const DEFAULTS = {
   downloadDir: '', categorize: true, maxConcurrent: 2, connections: 8, speedLimitKB: 0, confirm: true,
-  closeToTray: true, startWithOS: false, notify: true, port: 6877, token: '', deleteMode: 'ask',
+  closeToTray: true, startWithOS: false, startHidden: true, notify: true, port: 6877, token: '', deleteMode: 'ask',
   progressWindow: true, progressFloat: true, progressAutoClose: true, progressOnError: 'ask',
   scheduleEnabled: false, scheduleStart: '01:00', scheduleStop: '', scheduleDays: [0, 1, 2, 3, 4, 5, 6],
   autoUpdate: true, language: 'auto', clipboardWatch: false,
@@ -56,6 +56,7 @@ function clampSettings(s) {
     confirm: !!s.confirm,
     closeToTray: !!s.closeToTray,
     startWithOS: !!s.startWithOS,
+    startHidden: s.startHidden !== false,
     notify: !!s.notify,
     progressWindow: s.progressWindow !== false,
     language: ['auto', 'vi', 'en'].includes(s.language) ? s.language : 'auto',
@@ -131,7 +132,7 @@ function applySettings(prev) {
   manager.setMaxConcurrent(settings.maxConcurrent);
   appliedLimit = -1;
   applyLimit();
-  try { app.setLoginItemSettings({ openAtLogin: settings.startWithOS, args: ['--hidden'] }); } catch { /* unsupported platform */ }
+  try { app.setLoginItemSettings({ openAtLogin: settings.startWithOS, path: process.execPath, args: settings.startHidden ? ['--hidden'] : [] }); } catch { /* unsupported platform */ }
   if (!prev || prev.port !== settings.port || prev.token !== settings.token) { startApi(); }
   setClipboardWatch(settings.clipboardWatch);
 }

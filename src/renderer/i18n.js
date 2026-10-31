@@ -64,6 +64,7 @@
     'Chỉ áp dụng cho tệp đã chọn, đổi được cả khi đang tải. Vẫn nằm trong giới hạn chung của Cài đặt.': 'Applies only to the selected files and can be changed while downloading. The overall limit in Settings still applies.',
     'Giới hạn {v}/s': 'Limit {v}/s', 'Đã giới hạn {v}/s cho tệp đã chọn': 'Limited the selected files to {v}/s', 'Đã bỏ giới hạn cho tệp đã chọn': 'Removed the limit from the selected files',
     'Có gì mới': "What's new", 'Có gì mới trong Vexlo {v}': "What's new in Vexlo {v}", 'Mở trang phát hành': 'Open release page', 'Đã hiểu': 'Got it',
+    'Khi chạy cùng Windows, chạy ngầm dưới khay': 'When starting with Windows, run quietly in the tray', 'Vexlo vẫn mở và bắt link từ trình duyệt nhưng không hiện cửa sổ lên màn hình. Mở lại bằng biểu tượng ở khay hệ thống. Tắt mục này nếu muốn cửa sổ hiện lên.': 'Vexlo still starts and captures links from the browser but does not show its window. Open it again from the tray icon. Turn this off if you want the window to appear.',
     'Vexlo: phát hiện link tải': 'Vexlo: download link found', '{u}\nBấm để tải bằng Vexlo': '{u}\nClick to download with Vexlo',
     'Lấy từ trang phát hành của dự án trên GitHub': 'Taken from the project releases page on GitHub', 'Chạy cùng Windows': 'Start with Windows',
     'Số kết nối mỗi tệp (1–32)': 'Connections per file (1–32)', '8 là mức cân bằng. Một số máy chủ chặn khi quá nhiều kết nối.': '8 is a good balance. Some servers block too many connections.',
