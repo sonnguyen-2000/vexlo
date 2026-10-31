@@ -137,7 +137,7 @@
   <div class="modal" role="dialog" aria-label="Tùy chọn">
     <header>Tùy chọn <button class="x" data-close><svg class="ic"><use href="#i-x"/></svg></button></header>
     <div class="body">
-      <div class="tabs"><button class="on" data-tab="general">Chung</button><button data-tab="download">Tải xuống</button><button data-tab="schedule">Lịch tải</button><button data-tab="browser">Trình duyệt</button></div>
+      <div class="tabs"><button class="on" data-tab="general">Chung</button><button data-tab="download">Tải xuống</button><button data-tab="schedule">Lịch tải</button><button data-tab="browser">Trình duyệt</button><button data-tab="tools">Cập nhật &amp; công cụ</button></div>
       <div class="pane on" id="p-general">
         <div class="field"><label for="sLang">Ngôn ngữ</label>
           <select id="sLang"><option value="auto">Tự động (theo hệ thống)</option><option value="vi">Tiếng Việt</option><option value="en">English</option></select></div>
@@ -155,12 +155,6 @@
           <select id="sOnErr"><option value="ask">Hỏi tôi một lần</option><option value="keep">Giữ lại hiển thị lỗi</option><option value="close">Tự đóng</option></select></div>
         <label class="chk"><input type="checkbox" id="sNotify"><span>Thông báo khi tải xong</span></label>
         <label class="chk"><input type="checkbox" id="sTray"><span>Đóng cửa sổ thì thu nhỏ xuống khay hệ thống<small>Để Vexlo tiếp tục bắt link từ trình duyệt</small></span></label>
-        <div class="field"><label>Cập nhật</label>
-          <div class="row"><button class="btn sm" id="bUpd" type="button">Kiểm tra cập nhật</button><span class="hint" id="updMsg"></span></div>
-          <div class="row"><button class="btn sm" id="bNotes" type="button">Xem điểm mới của bản này</button><button class="btn sm" id="bLog" type="button">Xuất nhật ký lỗi</button></div>
-          <div class="row"><button class="btn sm" id="bExpList" type="button">Xuất danh sách tải</button><button class="btn sm" id="bImpList" type="button">Nhập danh sách tải</button></div>
-          <div class="hint" id="logMsg"></div></div>
-        <label class="chk"><input type="checkbox" id="sUpd"><span>Tự kiểm tra bản cập nhật mới<small>Lấy từ trang phát hành của dự án trên GitHub</small></span></label>
         <label class="chk"><input type="checkbox" id="sStart"><span>Chạy cùng Windows</span></label>
         <label class="chk"><input type="checkbox" id="sHidden"><span>Khi chạy cùng Windows, chạy ngầm dưới khay<small>Vexlo vẫn mở và bắt link từ trình duyệt nhưng không hiện cửa sổ lên màn hình. Mở lại bằng biểu tượng ở khay hệ thống. Tắt mục này nếu muốn cửa sổ hiện lên.</small></span></label>
       </div>
@@ -194,6 +188,20 @@
           </div>
           <div class="hint">Muốn tắt máy sau khi tải xong, chọn "Khi tải xong hết" ở thanh dưới cùng của cửa sổ chính. App cần đang chạy (có thể thu nhỏ xuống khay) đúng giờ hẹn.</div>
         </div>
+      </div>
+      <div class="pane" id="p-tools">
+        <div class="field"><label>Cập nhật</label>
+          <div class="row"><button class="btn sm" id="bUpd" type="button">Kiểm tra cập nhật</button><span class="hint" id="updMsg"></span></div>
+          <div class="row"><button class="btn sm" id="bNotes" type="button">Xem điểm mới của bản này</button></div></div>
+        <label class="chk"><input type="checkbox" id="sUpd"><span>Tự kiểm tra bản cập nhật mới<small>Lấy từ trang phát hành của dự án trên GitHub</small></span></label>
+        <div class="field"><label>Danh sách tải</label>
+          <div class="row"><button class="btn sm" id="bExpList" type="button">Xuất danh sách tải</button><button class="btn sm" id="bImpList" type="button">Nhập danh sách tải</button></div>
+          <div class="hint">Lưu danh sách tải hiện tại ra một tệp, hoặc nạp lại từ tệp đó (hay từ tệp văn bản mỗi dòng một link). Tiện khi cài lại máy.</div>
+          <div class="hint" id="listMsg"></div></div>
+        <div class="field"><label>Chẩn đoán lỗi</label>
+          <div class="row"><button class="btn sm" id="bLog" type="button">Xuất nhật ký lỗi</button></div>
+          <div class="hint">Lưu một tệp văn bản (không chứa mã ghép nối và không chứa link tải) để đính kèm khi báo lỗi.</div>
+          <div class="hint" id="logMsg"></div></div>
       </div>
       <div class="pane" id="p-browser">
         <div class="field"><label>Trạng thái</label><div id="bStatus"></div></div>

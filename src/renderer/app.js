@@ -634,7 +634,7 @@
   });
   $('bExpList').addEventListener('click', async () => {
     const r = await bridge.exportList();
-    $('logMsg').textContent = r && r.file ? T('Đã lưu {n} mục: {f}', { n: r.count, f: r.file }) : '';
+    $('listMsg').textContent = r && r.file ? T('Đã lưu {n} mục: {f}', { n: r.count, f: r.file }) : '';
   });
   $('bImpList').addEventListener('click', async () => {
     const r = await bridge.importList();
