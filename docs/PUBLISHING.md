@@ -49,26 +49,25 @@ gh repo create vexlo --public --source . --remote origin --push
 
 Nếu bạn thích giao diện đồ họa, dùng **GitHub Desktop** (https://desktop.github.com): "Add local repository" › "Publish repository".
 
-## 3. Phát hành bản đầu tiên
+## 3. Phát hành một bản (chỉ một lệnh)
 
-Mỗi bản phát hành làm đúng 4 bước:
+Dự án có sẵn lệnh `ship`. Nó chạy thử, tăng số phiên bản, commit bằng nội dung **bạn tự viết**, đẩy code và gắn tag:
 
-1. Sửa số phiên bản `"version"` trong `package.json` (ví dụ `0.1.0`). Bản sau phải **lớn hơn** bản trước.
-2. Commit và đẩy:
-   ```
-   git add .
-   git commit -m "Phát hành 0.1.0"
-   git push
-   ```
-3. Gắn tag trùng số phiên bản, có chữ `v` ở đầu, rồi đẩy tag lên:
-   ```
-   git tag v0.1.0
-   git push origin v0.1.0
-   ```
-4. Vào tab **Actions** của repo, workflow "Release" sẽ chạy khoảng 5–10 phút. Xong thì vào tab **Releases** sẽ thấy:
-   - `Vexlo-Setup-0.1.0.exe`: bộ cài cho Windows
-   - `latest.yml` và `*.blockmap`: file để app tự cập nhật (đừng xóa)
-   - `Vexlo-firefox-extension.zip`, `Vexlo-edge-extension.zip`: extension
+```
+npm run ship -- patch "Mô tả ngắn những gì bạn đã thay đổi"
+```
+
+- Chữ `--` là bắt buộc, và `patch` viết liền không có gạch. Nếu thiếu, npm sẽ nuốt mất tham số.
+- `patch` tăng số cuối (0.1.18 thành 0.1.19), `minor` tăng số giữa (0.1.19 thành 0.2.0), `major` tăng số đầu. Có thể gõ thẳng số, ví dụ `0.3.0`.
+- Chạy `npm run ship` không kèm gì thì lệnh sẽ hỏi từng thứ. Trong VS Code có thể dùng Terminal › Run Task › "Ship release".
+- Số phiên bản so từng phần theo số, nên 0.1.10 lớn hơn 0.1.9 (không phải so như chữ).
+
+Sau đó vào tab **Actions** của repo, workflow "Release" chạy khoảng 5 đến 10 phút. Xong thì tab **Releases** có:
+
+- `Vexlo-Setup-x.y.z.exe`: bộ cài cho Windows
+- `latest.yml` và `*.blockmap`: file để app tự cập nhật (đừng xóa)
+- `Vexlo-firefox-extension.zip`, `Vexlo-edge-extension.zip`: extension
+- Phần mô tả của bản phát hành được workflow **tự viết từ các nội dung commit** kể từ bản trước. Vì vậy hãy viết commit rõ ràng: người dùng sẽ đọc nó trong cửa sổ "Có gì mới" của app sau khi cập nhật. Muốn viết lại cho đẹp, bấm Edit trên trang Release.
 
 Nếu workflow báo lỗi đỏ, bấm vào lần chạy đó để xem dòng lỗi (thường là sai `owner`/`repo`, hoặc thiếu `package-lock.json`).
 
@@ -79,7 +78,7 @@ Muốn tự build trên máy bạn (không qua GitHub): `npm run dist`. File n�
 - Người dùng tải `Vexlo-Setup-x.y.z.exe` ở trang Releases rồi chạy.
 - Do bộ cài **chưa ký số**, Windows SmartScreen sẽ hiện "Windows protected your PC": bấm **More info** › **Run anyway**.
   Hãy ghi rõ điều này trong README của repo để mọi người không hoảng.
-- Từ lúc cài, app tự kiểm tra bản mới trên GitHub Releases khi mở và mỗi 6 giờ. Có bản mới thì tải ngầm và cài khi thoát app.
+- Từ lúc cài, app tự kiểm tra bản mới trên GitHub Releases sau khi mở 20 giây và mỗi 4 giờ. Cũng có nút "Kiểm tra cập nhật" trong Tùy chọn. Có bản mới thì tải ngầm, rồi khi không còn lượt tải nào đang chạy, app tự thoát, cài bản mới và mở lại.
   Người dùng tắt được ở Tùy chọn › Chung › "Tự kiểm tra bản cập nhật mới".
 - Muốn ký số miễn phí cho dự án mã nguồn mở, xem chương trình **SignPath Foundation** (https://signpath.org). Không bắt buộc.
 
@@ -107,10 +106,9 @@ Chrome Web Store thu phí đăng ký nhà phát triển một lần khoảng 5 U
 
 ## 6. Danh sách kiểm tra mỗi lần ra bản mới
 
-- [ ] `npm test` chạy xong không lỗi
-- [ ] Tăng `"version"` trong `package.json`
-- [ ] Ghi chú thay đổi (tùy chọn): sửa phần mô tả của Release trên GitHub sau khi workflow xong
-- [ ] `git commit` › `git push` › `git tag vX.Y.Z` › `git push origin vX.Y.Z`
+- [ ] Viết nội dung commit rõ ràng (nó thành ghi chú phát hành)
+- [ ] `npm run ship -- patch "nội dung commit"` (đã tự chạy test và tăng version)
+- [ ] Theo dõi tab Actions đến khi xong, kiểm tra Release có đủ `latest.yml`
 - [ ] Cài thử bản mới lên máy sạch, kiểm tra: tải được, extension tự ghép nối, gỡ cài đặt xóa sạch dữ liệu
 
 ## 7. Lỗi thường gặp
@@ -121,4 +119,5 @@ Chrome Web Store thu phí đăng ký nhà phát triển một lần khoảng 5 U
 | Workflow lỗi `npm ci` hoặc thiếu lockfile | Chạy `npm install` rồi commit file `package-lock.json` |
 | Release không có `latest.yml` | Workflow chưa chạy xong hoặc lỗi. Mở tab Actions để xem |
 | App không thấy bản cập nhật | Kiểm tra `owner`/`repo` trong `package.json` và số version bản mới có lớn hơn bản đang cài |
+| `npm run ship` báo "Bump must be patch, minor, major..." | Gõ `npm run ship -- patch "nội dung"` (có `--`, `patch` không có gạch) |
 | Tag đã đẩy nhưng muốn làm lại | `git tag -d v0.1.0`, `git push origin :refs/tags/v0.1.0`, xóa Release trên GitHub rồi tag lại |

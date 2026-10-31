@@ -9,13 +9,17 @@ A fast, free download manager for Windows in the style of IDM. Multi-connection 
 - **Fast downloads:** multi-connection with dynamic segment splitting, resume, automatic retry, speed limit.
 - **Video streams:** HLS (`.m3u8`) and DASH (`.mpd`), AES-128, fMP4, merged to MP4 with ffmpeg. Lists a video with its title, duration and quality like IDM.
 - **IDM-style windows:** a compact confirmation window (name, folder, quality, connections) and a small progress window for each download.
-- **Queue:** only a few downloads run at once, the rest wait their turn.
+- **Queue:** only a few downloads run at once, the rest wait their turn. Right-click a waiting file to download it first or send it to the end.
+- **Speed limits:** an overall limit, a separate limit for certain hours of the day (also across midnight) and a limit for each file that can be changed while it downloads.
 - **Duplicates:** the same link already in the list is not added twice; a failed earlier attempt of the same file is replaced; a finished file with the same name is kept and the new one is saved as `name (1).ext`.
 - **Schedule:** start and stop downloads at set times on chosen days.
 - **When everything is finished:** pick shut down, sleep, hibernate or quit once; one 60-second countdown appears after the last file ends (not one prompt per file).
 - **Browser extension** for Firefox and Edge/Chrome: floating button on videos, capture list, download takeover, context menu. It pairs with the app automatically (no code to type); each PC has its own pairing code.
+- **Verify files:** right-click a finished file to compute its SHA-256 and compare it with the publisher's hash.
+- **Copy a link, download it:** optional; copy a file link and Vexlo offers to download it (works without the extension).
+- **Quiet start:** start with Windows and stay in the tray without showing the window (optional).
 - **Clean uninstall:** removes the app data and registry entries; your downloaded files are never touched.
-- **Auto update** from GitHub Releases (can be turned off in Settings).
+- **Auto update** from GitHub Releases (can be turned off in Settings), with a "What's new" window after each update.
 - Light and dark theme, tray icon, drag and drop or paste links.
 
 ## Install (users)
@@ -41,7 +45,7 @@ npm test           # engine, API and extension tests
 npm run dist       # build dist/Vexlo-Setup-x.y.z.exe (also builds the Edge extension folder)
 ```
 
-Publishing a release to GitHub is described in [`docs/PUBLISHING.md`](docs/PUBLISHING.md) (in Vietnamese). In short: set your GitHub name in `package.json`, push the code, then push a tag such as `v0.1.0`; the workflow in `.github/workflows/release.yml` builds and publishes the installer.
+Publishing a release to GitHub is described in [`docs/PUBLISHING.en.md`](docs/PUBLISHING.en.md) ([Tiếng Việt](docs/PUBLISHING.md)). In short: set your GitHub name in `package.json`, push the code, then run `npm run ship -- patch "your message"`; it tests, bumps the version, commits, pushes and tags, and the workflow in `.github/workflows/release.yml` builds and publishes the installer with release notes made from your commit messages.
 
 ## Security
 
@@ -69,13 +73,17 @@ Trình quản lý tải miễn phí cho Windows, kiểu IDM. Tải đa luồng, 
 - **Tải nhanh:** nhiều kết nối, chia đoạn động, tải tiếp khi bị ngắt (resume), tự thử lại, giới hạn tốc độ.
 - **Video luồng:** HLS (`.m3u8`) và DASH (`.mpd`), AES-128, fMP4, ghép thành MP4 bằng ffmpeg. Hiện từng video kèm tên, thời lượng, chất lượng giống IDM.
 - **Cửa sổ kiểu IDM:** hộp xác nhận gọn (tên, thư mục, chất lượng, số kết nối) và cửa sổ nhỏ theo dõi tiến độ cho từng lượt tải.
-- **Hàng đợi:** chỉ tải một số tệp cùng lúc, các tệp còn lại chờ đến lượt.
+- **Hàng đợi:** chỉ tải một số tệp cùng lúc, các tệp còn lại chờ đến lượt. Chuột phải vào tệp đang chờ để tải trước hoặc cho xuống cuối.
+- **Giới hạn tốc độ:** giới hạn chung, giới hạn riêng cho một khoảng giờ trong ngày (kể cả qua nửa đêm) và giới hạn riêng từng tệp, đổi được cả khi đang tải.
 - **Tải trùng:** cùng một link đã có trong danh sách thì không thêm lần hai; lần tải trước của tệp đó bị lỗi thì được thay thế; tệp cùng tên đã tải xong thì giữ lại và bản mới lưu thành `tên (1).đuôi`.
 - **Lịch tải:** tự bắt đầu và dừng tải vào giờ, ngày bạn chọn.
 - **Khi tải xong hết:** chọn một lần tắt máy, ngủ, ngủ đông hoặc thoát app; chỉ có một lần đếm ngược 60 giây sau tệp cuối cùng (không hỏi từng tệp).
 - **Extension** cho Firefox và Edge/Chrome: nút nổi trên video, danh sách video bắt được, tiếp quản tải của trình duyệt, menu chuột phải. Tự ghép nối với app, không cần nhập mã; mỗi máy một mã riêng.
+- **Kiểm tra tệp:** chuột phải vào tệp đã tải xong để tính SHA-256 và so với mã của nhà phát hành.
+- **Sao chép link là tải:** tùy chọn; chép link file là Vexlo gợi ý tải (không cần extension).
+- **Khởi động êm:** chạy cùng Windows nhưng chỉ nằm ở khay, không hiện cửa sổ (tùy chọn).
 - **Gỡ cài đặt sạch:** xóa dữ liệu app và các mục registry; tệp bạn đã tải không bao giờ bị xóa.
-- **Tự cập nhật** từ GitHub Releases (có thể tắt trong Tùy chọn).
+- **Tự cập nhật** từ GitHub Releases (có thể tắt trong Tùy chọn), có cửa sổ "Có gì mới" sau mỗi lần cập nhật.
 - Giao diện sáng/tối, khay hệ thống, kéo thả hoặc dán link.
 
 ## Cài đặt (người dùng)
@@ -101,7 +109,7 @@ npm test           # kiểm thử engine, API và extension
 npm run dist       # tạo dist/Vexlo-Setup-x.y.z.exe (tự tạo luôn thư mục extension cho Edge)
 ```
 
-Cách phát hành lên GitHub xem trong [`docs/PUBLISHING.md`](docs/PUBLISHING.md). Tóm tắt: điền tên GitHub của bạn trong `package.json`, đẩy code lên, rồi đẩy một tag như `v0.1.0`; workflow `.github/workflows/release.yml` tự build và đăng bộ cài.
+Cách phát hành lên GitHub xem trong [`docs/PUBLISHING.md`](docs/PUBLISHING.md) ([English](docs/PUBLISHING.en.md)). Tóm tắt: điền tên GitHub của bạn trong `package.json`, đẩy code lên, rồi chạy `npm run ship -- patch "nội dung commit"`; lệnh này chạy thử, tăng phiên bản, commit, đẩy code và gắn tag, workflow `.github/workflows/release.yml` tự build, đăng bộ cài kèm ghi chú phát hành tạo từ nội dung commit.
 
 ## Bảo mật
 

@@ -13,6 +13,8 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # full history and tags, so the release notes can list the commits since the last release
 
       - uses: actions/setup-node@v4
         with:
@@ -39,5 +41,23 @@ jobs:
           Compress-Archive -Path extension\* -DestinationPath Vexlo-firefox-extension.zip -Force
           Compress-Archive -Path extension-edge\* -DestinationPath Vexlo-edge-extension.zip -Force
           gh release upload "${{ github.ref_name }}" Vexlo-firefox-extension.zip Vexlo-edge-extension.zip --clobber
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Write the release notes from the commit messages
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Continue'
+          $tag = "${{ github.ref_name }}"
+          $prev = $null
+          try { $prev = (git describe --tags --abbrev=0 "$tag^" 2>$null) } catch { $prev = $null }
+          if ($LASTEXITCODE -ne 0) { $prev = $null }
+          $range = if ($prev) { "$prev..$tag" } else { $tag }
+          $lines = @(git log $range --no-merges --pretty=format:"%s" | Where-Object { $_ -and $_ -notmatch '^(v?\d+\.\d+\.\d+$|Release |Bump )' } | ForEach-Object { "- $_" })
+          if ($lines.Count -gt 0) {
+            ("## What's new`n`n" + ($lines -join "`n")) | Set-Content -Path release-notes.md -Encoding utf8
+            gh release edit $tag --notes-file release-notes.md
+          }
+          exit 0
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
