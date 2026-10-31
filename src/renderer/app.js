@@ -435,7 +435,7 @@
       one && one.status === 'done' && [T('Quét virus bằng Windows Defender'), 'i-open', async () => {
         toast(T('Đang quét...'));
         const r = await bridge.scanFile(one.id);
-        if (!r.ok) { toast(T('Không quét được (cần Windows Defender trên Windows)'), true); } else { toast(r.clean ? T('Không phát hiện mối đe dọa') : T('Windows Defender phát hiện mối đe dọa! Hãy mở Windows Security để xử lý.'), !r.clean); }
+        if (!r.ok) { if (!r.handled) { toast(T('Không đọc được tệp'), true); } } else { toast(r.clean ? T('Không phát hiện mối đe dọa') : T('Windows Defender phát hiện mối đe dọa! Hãy mở Windows Security để xử lý.'), !r.clean); }
       }],
       one && [T('Sao chép link'), 'i-copy', async () => { await bridge.copyLink(one.id); toast(T('Đã sao chép link')); }],
       one && one.status === 'error' && one.meta && one.meta.page && [T('Làm mới link'), 'i-play', async () => {

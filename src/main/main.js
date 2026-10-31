@@ -585,13 +585,27 @@ function registerIpc() {
   ipcMain.handle('dl:scan', async (e, id) => {
     const t = manager.get(id);
     const file = t && t.state.path;
-    if (process.platform !== 'win32' || !file || !fs.existsSync(file)) { return { ok: false, reason: 'unavailable' }; }
+    if (!file || !fs.existsSync(file)) { return { ok: false, handled: false }; }
+    const win = BrowserWindow.fromWebContents(e.sender) || undefined;
+    // When Defender cannot do it, say why and offer to open the folder so another antivirus can scan the file.
+    const fail = async (detail) => {
+      const r = await dialog.showMessageBox(win, {
+        type: 'info', title: T('Quét virus'), message: T('Windows Defender không quét được tệp này'), detail,
+        buttons: [T('Mở thư mục chứa tệp'), T('Đóng')], defaultId: 1, cancelId: 1, noLink: true,
+      });
+      if (r.response === 0) { shell.showItemInFolder(file); }
+      return { ok: false, handled: true };
+    };
     const exe = path.join(process.env.ProgramFiles || 'C:\\Program Files', 'Windows Defender', 'MpCmdRun.exe');
-    if (!fs.existsSync(exe)) { return { ok: false, reason: 'unavailable' }; }
+    if (process.platform !== 'win32' || !fs.existsSync(exe)) {
+      return fail(T('Không tìm thấy Windows Defender trên máy này. Hãy mở thư mục chứa tệp và quét bằng phần mềm diệt virus bạn đang dùng.'));
+    }
     const code = await new Promise((resolve) => {
       execFile(exe, ['-Scan', '-ScanType', '3', '-File', file, '-DisableRemediation'], { timeout: 10 * 60 * 1000, windowsHide: true }, (err) => resolve(err ? (typeof err.code === 'number' ? err.code : -1) : 0));
     });
-    return code === 0 ? { ok: true, clean: true } : code === 2 ? { ok: true, clean: false } : { ok: false, reason: 'failed' };
+    if (code === 0) { return { ok: true, clean: true }; }
+    if (code === 2) { return { ok: true, clean: false }; }
+    return fail(T('Windows Defender đang bị tắt hoặc không phản hồi (mã lỗi {c}). Hãy bật lại Windows Defender, hoặc mở thư mục chứa tệp và quét bằng phần mềm diệt virus bạn đang dùng.', { c: code }));
   });
   ipcMain.handle('update:status', () => updStatus);
   ipcMain.handle('update:install', () => { if (updater && updStatus.state === 'ready') { applyUpdateNow(); } return true; });
