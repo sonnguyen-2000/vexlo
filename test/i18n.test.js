@@ -108,3 +108,15 @@ test('explainExtractFailure: turns what the programs said into a plain reason', 
   assert.equal(why([{ name: 'tar', code: 1, msg: 'something odd' }]), 'unknown');
   assert.equal(why([]), 'unknown');
 });
+
+test('extractCommands with a password: only WinRAR / 7-Zip get it, tar is left out, no password means -p-', () => {
+  const { extractCommands } = require('../src/core/util');
+  const env = { ProgramFiles: 'C:\\Program Files', SystemRoot: 'C:\\Windows' };
+  const all = () => true;
+  const withPw = extractCommands('D:\\a.rar', 'D:\\out', { platform: 'win32', env, exists: all, password: 'p@ss word' });
+  assert.deepEqual(withPw.map((c) => c.name), ['unrar', 'winrar', '7zip']);
+  assert.ok(withPw[0].args.includes('-pp@ss word'));
+  assert.ok(withPw[2].args.includes('-pp@ss word'));
+  assert.ok(extractCommands('D:\\a.rar', 'D:\\out', { platform: 'win32', env, exists: all })[0].args.includes('-p-'));
+  assert.deepEqual(extractCommands('/a.rar', '/o', { platform: 'linux', password: 'x' }), []);
+});

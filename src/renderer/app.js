@@ -432,11 +432,7 @@
       sel.some((t) => t.status === 'queued') && [T('Cho xuống cuối hàng đợi'), 'i-pause', () => bridge.prioritize(sel.map((t) => t.id), 'bottom')],
       canPause && [T('Tạm dừng'), 'i-pause', () => bridge.pause(sel.map((t) => t.id))],
       one && one.status === 'done' && [T('Tính mã SHA-256 (kiểm tra tệp)'), 'i-open', async () => { toast(T('Đang tính mã SHA-256...')); if (!(await bridge.hashFile(one.id))) { toast(T('Không đọc được tệp'), true); } }],
-      one && one.status === 'done' && /\.(zip|7z|rar|tar|tgz|tbz2|txz|gz|bz2|xz)$/i.test(one.path || one.filename || '') && [T('Giải nén tại đây'), 'i-folder', async () => {
-        toast(T('Đang giải nén...'));
-        const r = await bridge.extractFile(one.id);
-        if (!r.ok && !r.handled) { toast(T('Không giải nén được'), true); }
-      }],
+      one && one.status === 'done' && /\.(zip|7z|rar|tar|tgz|tbz2|txz|gz|bz2|xz)$/i.test(one.path || one.filename || '') && [T('Giải nén tại đây'), 'i-folder', () => extractWith(one, '')],
       one && one.status === 'done' && [T('Quét virus bằng Windows Defender'), 'i-open', async () => {
         toast(T('Đang quét...'));
         const r = await bridge.scanFile(one.id);
@@ -475,6 +471,29 @@
   window.addEventListener('blur', hideMenu);
 
   // ---------------------------------------------------------------- add dialog
+
+  // Extract; an encrypted archive opens a small window asking for the password (and again when it was wrong).
+  let pwdTask = null;
+  async function extractWith(t, password, wrong) {
+    toast(T('Đang giải nén...'));
+    const r = await bridge.extractFile(t.id, password);
+    if (r.ok) { return; }
+    if (r.needPassword) {
+      pwdTask = t;
+      $('pName').textContent = t.filename || '';
+      $('pPwd').value = '';
+      $('pMsg').textContent = wrong || r.wrongPassword ? T('Sai mật khẩu, hãy thử lại.') : T('File nén này có mật khẩu.');
+      $('pShow').checked = false;
+      $('pPwd').type = 'password';
+      openModal('mPwd');
+      $('pPwd').focus();
+      return;
+    }
+    if (!r.handled) { toast(T('Không giải nén được'), true); }
+  }
+  $('pOk').addEventListener('click', () => { const t = pwdTask; const pw = $('pPwd').value; if (!t || !pw) { return; } closeModals(); extractWith(t, pw, false); });
+  $('pPwd').addEventListener('keydown', (e) => { if (e.key === 'Enter') { $('pOk').click(); } });
+  $('pShow').addEventListener('change', () => { $('pPwd').type = $('pShow').checked ? 'text' : 'password'; });
 
   let limIds = [];
   function openLimit(sel) {

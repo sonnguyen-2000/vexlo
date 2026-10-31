@@ -171,10 +171,11 @@ function extractDirFor(file) {
  * and 7-Zip in their usual folders and always ends with tar (built into Windows 10+, also fine for zip/tar).
  * @returns {{name:string, exe:string, args:string[]}[]}
  */
-function extractCommands(file, dest, { platform = process.platform, env = process.env, exists = fs.existsSync } = {}) {
+function extractCommands(file, dest, { platform = process.platform, env = process.env, exists = fs.existsSync, password = '' } = {}) {
   const ext = (/\.([a-z0-9]+)$/i.exec(file) || [])[1] || '';
   const tar = { name: 'tar', exe: platform === 'win32' ? path.win32.join(env.SystemRoot || 'C:\\Windows', 'System32', 'tar.exe') : 'tar', args: ['-xf', file, '-C', dest] };
-  if (platform !== 'win32') { return [tar]; }
+  const pw = String(password || '');
+  if (platform !== 'win32') { return pw ? [] : [tar]; } // tar cannot open encrypted archives
   const roots = [...new Set([env.ProgramFiles, env['ProgramFiles(x86)'], env.ProgramW6432, 'C:\\Program Files', 'C:\\Program Files (x86)'].filter(Boolean))];
   const find = (rel) => { for (const r of roots) { const f = path.win32.join(r, rel); if (exists(f)) { return f; } } return ''; };
   const withSlash = dest.endsWith('\\') ? dest : dest + '\\';
@@ -182,13 +183,13 @@ function extractCommands(file, dest, { platform = process.platform, env = proces
   const unrar = find('WinRAR\\UnRAR.exe');
   const winrar = find('WinRAR\\WinRAR.exe');
   const seven = find('7-Zip\\7z.exe');
-  const cmdUnrar = unrar && { name: 'unrar', exe: unrar, args: ['x', '-y', '-p-', '-idq', file, withSlash] };
-  const cmdWinrar = winrar && { name: 'winrar', exe: winrar, args: ['x', '-ibck', '-y', '-p-', file, withSlash] };
-  const cmdSeven = seven && { name: '7zip', exe: seven, args: ['x', '-y', `-o${dest}`, file] };
+  const cmdUnrar = unrar && { name: 'unrar', exe: unrar, args: ['x', '-y', pw ? `-p${pw}` : '-p-', '-idq', file, withSlash] };
+  const cmdWinrar = winrar && { name: 'winrar', exe: winrar, args: ['x', '-ibck', '-y', pw ? `-p${pw}` : '-p-', file, withSlash] };
+  const cmdSeven = seven && { name: '7zip', exe: seven, args: ['x', '-y', ...(pw ? [`-p${pw}`] : []), `-o${dest}`, file] };
   if (ext.toLowerCase() === 'rar') { found.push(cmdUnrar, cmdWinrar, cmdSeven, tar); }
   else if (ext.toLowerCase() === '7z') { found.push(cmdSeven, cmdUnrar || cmdWinrar, tar); }
   else { found.push(tar, cmdSeven, cmdUnrar || cmdWinrar); }
-  return found.filter(Boolean);
+  return found.filter((c) => c && !(pw && c.name === 'tar'));
 }
 
 /**
@@ -199,7 +200,7 @@ function extractCommands(file, dest, { platform = process.platform, env = proces
 function explainExtractFailure(attempts) {
   const all = attempts.map((a) => `${a.msg || ''}`).join(' | ');
   const codes = attempts.filter((a) => a.name !== 'tar').map((a) => a.code);
-  if (/password|encrypted/i.test(all) || codes.includes(11)) { return 'password'; }
+  if (/password|encrypt/i.test(all) || codes.includes(11)) { return 'password'; }
   if (/no space|disk full|not enough space/i.test(all) || attempts.some((a) => a.code === 5 && a.name !== 'tar')) { return 'space'; }
   if (/crc|checksum|corrupt|data error|unexpected end|damaged|truncated|headers error/i.test(all) || codes.includes(3)) { return 'corrupt'; }
   if (/unrecognized|not an archive|unsupported|cannot open|is not rar|not supported|unknown archive/i.test(all)) { return 'format'; }

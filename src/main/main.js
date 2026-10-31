@@ -133,15 +133,15 @@ function applyLimit() {
 
 // ---- extract an archive next to itself, into a new folder named after it (Windows ships tar.exe, which reads zip/7z/tar/rar...).
 // tar refuses entries that would land outside the target folder, so a hostile archive cannot overwrite other files.
-function extractArchive(file) {
+function extractArchive(file, password = '') {
   return new Promise((resolve) => {
     const dest = extractDirFor(file);
     try { fs.mkdirSync(dest, { recursive: true }); } catch (e) { return resolve({ ok: false, error: e.message, attempts: [] }); }
-    const cmds = extractCommands(file, dest); // WinRAR / 7-Zip when installed (better for .rar and .7z), then tar
+    const cmds = extractCommands(file, dest, { password }); // WinRAR / 7-Zip when installed (better for .rar and .7z), then tar
     const attempts = [];
     const next = (i) => {
       if (i >= cmds.length) {
-        try { if (!fs.readdirSync(dest).length) { fs.rmdirSync(dest); } } catch { /* leave what was extracted */ }
+        try { fs.rmSync(dest, { recursive: true, force: true }); } catch { /* the folder is new and ours: remove the leftovers of a failed try */ }
         const detail = attempts.map((a) => `${a.name} (${a.code}): ${a.msg}`).join('\n');
         netLog.push(`${new Date().toISOString().slice(11, 19)} extract failed for ${path.basename(file)}: ${detail.replace(/\n/g, ' | ')}`);
         return resolve({ ok: false, error: attempts.length ? attempts[0].msg : '', attempts, reason: explainExtractFailure(attempts) });
@@ -162,21 +162,23 @@ function extractArchive(file) {
   });
 }
 const EXTRACT_REASON = {
-  password: 'File nén có mật khẩu (hoặc sai mật khẩu). Vexlo chưa hỗ trợ nhập mật khẩu: hãy mở file bằng WinRAR.',
+  password: 'File nén có mật khẩu. Bấm chuột phải vào tệp, chọn "Giải nén tại đây" rồi nhập mật khẩu.',
   corrupt: 'File nén bị lỗi hoặc tải chưa trọn vẹn. Hãy thử tải lại, hoặc mở bằng WinRAR để xem chi tiết.',
   format: 'Không nhận ra định dạng file, hoặc là một phần của bộ nhiều tệp (part1, part2...). Hãy tải đủ các phần rồi mở phần đầu bằng WinRAR.',
   missing: 'Không tìm thấy chương trình giải nén. Hãy cài WinRAR hoặc 7-Zip.',
   space: 'Ổ đĩa không đủ chỗ trống để giải nén.',
   unknown: 'Không rõ nguyên nhân. Hãy thử mở file bằng WinRAR để xem thông báo lỗi.',
 };
-async function extractAndTell(file) {
-  const r = await extractArchive(file);
-  if (settings.notify && Notification.isSupported()) {
-    const n = new Notification({
-      title: r.ok ? T('Đã giải nén') : T('Không giải nén được'), body: r.ok ? path.basename(r.dir) : `${path.basename(file)}: ${T(EXTRACT_REASON[r.reason] || EXTRACT_REASON.unknown)}`, silent: true,
-    });
-    if (r.ok) { n.on('click', () => shell.openPath(r.dir)); }
-    n.show();
+async function extractAndTell(file, { password = '', quiet = false } = {}) {
+  const r = await extractArchive(file, password);
+  if (r.ok || !quiet) {
+    if (settings.notify && Notification.isSupported()) {
+      const n = new Notification({
+        title: r.ok ? T('Đã giải nén') : T('Không giải nén được'), body: r.ok ? path.basename(r.dir) : `${path.basename(file)}: ${T(EXTRACT_REASON[r.reason] || EXTRACT_REASON.unknown)}`, silent: true,
+      });
+      if (r.ok) { n.on('click', () => shell.openPath(r.dir)); }
+      n.show();
+    }
   }
   return r;
 }
@@ -669,23 +671,24 @@ function registerIpc() {
     return { added, skipped, total: list.length };
   });
   // Windows Defender scan of one downloaded file (report only: nothing is removed without the user deciding).
-  ipcMain.handle('dl:extract', async (e, id) => {
+  ipcMain.handle('dl:extract', async (e, id, password) => {
     const t = manager.get(id);
     const file = t && t.state.path;
     if (!file || !fs.existsSync(file) || !isArchive(file)) { return { ok: false, error: 'not an archive' }; }
-    const r = await extractAndTell(file);
-    if (!r.ok) {
-      const win = BrowserWindow.fromWebContents(e.sender) || undefined;
-      const tech = (r.attempts || []).map((a) => `${a.name} (${a.code}): ${a.msg}`).join('\n');
-      const box = await dialog.showMessageBox(win, {
-        type: 'warning', title: T('Giải nén'), message: T('Không giải nén được'),
-        detail: `${T(EXTRACT_REASON[r.reason] || EXTRACT_REASON.unknown)}${tech ? '\n\n' + tech : ''}`,
-        buttons: [T('Mở thư mục chứa tệp'), T('Đóng')], defaultId: 1, cancelId: 1, noLink: true,
-      });
-      if (box.response === 0) { shell.showItemInFolder(file); }
-      return { ...r, handled: true };
-    }
-    return r;
+    const pw = typeof password === 'string' ? password.slice(0, 256) : '';
+    const r = await extractAndTell(file, { password: pw, quiet: true });
+    if (r.ok) { return r; }
+    // An encrypted archive: the window asks for the password (again, when the one given was wrong). Anything else is explained here.
+    if (r.reason === 'password') { return { ok: false, needPassword: true, wrongPassword: !!pw, handled: true }; }
+    const win = BrowserWindow.fromWebContents(e.sender) || undefined;
+    const tech = (r.attempts || []).map((a) => `${a.name} (${a.code}): ${a.msg}`).join('\n');
+    const box = await dialog.showMessageBox(win, {
+      type: 'warning', title: T('Giải nén'), message: T('Không giải nén được'),
+      detail: `${T(EXTRACT_REASON[r.reason] || EXTRACT_REASON.unknown)}${tech ? '\n\n' + tech : ''}`,
+      buttons: [T('Mở thư mục chứa tệp'), T('Đóng')], defaultId: 1, cancelId: 1, noLink: true,
+    });
+    if (box.response === 0) { shell.showItemInFolder(file); }
+    return { ...r, handled: true };
   });
   ipcMain.handle('dl:scan', async (e, id) => {
     const t = manager.get(id);
