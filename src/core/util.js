@@ -172,6 +172,12 @@ function parseImportList(text) {
 const ARCHIVE_EXT = /\.(zip|7z|rar|tar|tgz|tbz2|txz|tar\.gz|tar\.bz2|tar\.xz|gz|bz2|xz)$/i;
 const isArchive = (name) => ARCHIVE_EXT.test(String(name || ''));
 
+/** Same, but inside a folder of the caller's choice. */
+function extractDirIn(file, baseDir) {
+  const name = path.basename(file).replace(ARCHIVE_EXT, '') || 'extracted';
+  return uniquePath(baseDir, sanitizeFilename(name) || 'extracted');
+}
+
 /** Folder to extract "dir/Name.tar.gz" into: "dir/Name" (a numbered name if that already exists). */
 function extractDirFor(file) {
   const dir = path.dirname(file);
@@ -244,6 +250,53 @@ function parseListedTotal(tool, out) {
   return Number.isFinite(total) ? total : 0;
 }
 
+/** The command that lists the files inside an archive: UnRAR / 7-Zip when present, else tar (names only, no sizes). */
+function entriesCommand(file, { platform = process.platform, env = process.env, exists = fs.existsSync, password = '', toolDir = '' } = {}) {
+  const c = listCommand(file, { platform, env, exists, password, toolDir });
+  if (c) { return c; }
+  if (String(password || '')) { return null; } // tar cannot read encrypted archives
+  const exe = platform === 'win32' ? path.win32.join(env.SystemRoot || 'C:\\Windows', 'System32', 'tar.exe') : 'tar';
+  return { name: 'tar', exe, args: ['-tf', file] };
+}
+
+/**
+ * Files inside an archive from the output of entriesCommand's program.
+ * @returns {{name:string, size:number, dir:boolean, encrypted:boolean}[]}
+ */
+function parseListedEntries(tool, out) {
+  const text = String(out || '').replace(/\r/g, '');
+  const res = [];
+  if (tool === 'tar') {
+    for (const line of text.split('\n')) {
+      const n = line.trim();
+      if (n) { res.push({ name: n.replace(/\/$/, ''), size: 0, dir: n.endsWith('/'), encrypted: false }); }
+    }
+    return res;
+  }
+  if (tool === 'unrar') {
+    for (const block of text.split(/\n\s*\n/)) {
+      const name = /^\s*Name:\s*(.+)$/m.exec(block);
+      if (!name) { continue; }
+      const type = /^\s*Type:\s*(\w+)/m.exec(block);
+      const size = /^\s*Size:\s*(\d+)/m.exec(block);
+      const flags = /^\s*Flags:\s*(.+)$/m.exec(block);
+      res.push({ name: name[1].trim(), size: size ? Number(size[1]) : 0, dir: !!type && /dir/i.test(type[1]), encrypted: !!flags && /encrypted/i.test(flags[1]) });
+    }
+    return res;
+  }
+  const i = text.indexOf('----------');
+  if (i < 0) { return res; }
+  for (const block of text.slice(i + 10).split(/\n\s*\n/)) {
+    const name = /^Path = (.+)$/m.exec(block);
+    if (!name) { continue; }
+    const size = /^Size = (\d+)/m.exec(block);
+    const folder = /^Folder = (.)/m.exec(block);
+    const enc = /^Encrypted = (.)/m.exec(block);
+    res.push({ name: name[1].trim(), size: size ? Number(size[1]) : 0, dir: !!folder && folder[1] === '+', encrypted: !!enc && enc[1] === '+' });
+  }
+  return res;
+}
+
 /**
  * A short, plain reason for a failed extraction, from what the programs reported.
  * @param {{name:string, code:(number|string), msg:string}[]} attempts
@@ -261,7 +314,7 @@ function explainExtractFailure(attempts) {
 }
 
 module.exports = {
-  looksLikeWebPage,
+  looksLikeWebPage, extractDirIn, entriesCommand, parseListedEntries,
   listCommand, parseListedTotal, explainExtractFailure, extractCommands, isArchive, extractDirFor, parseImportList, plainNotes, downloadLinkIn, sanitizeFilename, filenameFromContentDisposition, filenameFromUrl, extFromMime,
   pickFilename, uniquePath, sleep, atomicWriteJson,
 };

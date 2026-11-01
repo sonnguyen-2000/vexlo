@@ -433,6 +433,7 @@
       canPause && [T('Tạm dừng'), 'i-pause', () => bridge.pause(sel.map((t) => t.id))],
       one && one.status === 'done' && [T('Tính mã SHA-256 (kiểm tra tệp)'), 'i-open', async () => { toast(T('Đang tính mã SHA-256...')); if (!(await bridge.hashFile(one.id))) { toast(T('Không đọc được tệp'), true); } }],
       one && one.status === 'done' && /\.(zip|7z|rar|tar|tgz|tbz2|txz|gz|bz2|xz)$/i.test(one.path || one.filename || '') && [T('Giải nén tại đây'), 'i-folder', () => extractWith(one, '')],
+      one && one.status === 'done' && /\.(zip|7z|rar|tar|tgz|tbz2|txz|gz|bz2|xz)$/i.test(one.path || one.filename || '') && [T('Xem trước và giải nén vào…'), 'i-archive', () => openArchive(one)],
       one && one.status === 'done' && [T('Quét virus bằng Windows Defender'), 'i-open', async () => {
         toast(T('Đang quét...'));
         const r = await bridge.scanFile(one.id);
@@ -472,6 +473,81 @@
 
   // ---------------------------------------------------------------- add dialog
 
+  // ---- "Xem trước và giải nén vào…": what is inside, and where it should go
+  let arcTask = null;
+  async function arcLoad(t, password) {
+    $('aSummary').textContent = T('Đang đọc danh sách file…');
+    $('aList').textContent = '';
+    $('aGo').disabled = true;
+    const r = await bridge.archiveList(t.id, password || '');
+    if (!r.ok) {
+      if (r.needPassword) {
+        $('aPwdBox').style.display = 'block';
+        $('aPwdMsg').textContent = r.wrongPassword ? T('Sai mật khẩu, hãy thử lại.') : '';
+        $('aSummary').textContent = T('Nhập mật khẩu rồi bấm "Giải nén" để xem danh sách và giải nén.');
+        $('aGo').disabled = false;
+        $('aGo').dataset.mode = 'password';
+        $('aPwd').focus();
+      } else {
+        $('aSummary').textContent = T('Không đọc được danh sách file trong file nén này. Bạn vẫn có thể thử giải nén.');
+        $('aGo').disabled = false;
+        $('aGo').dataset.mode = 'extract';
+      }
+      return;
+    }
+    $('aPwdBox').style.display = r.encrypted ? 'block' : 'none';
+    $('aGo').dataset.mode = 'extract';
+    $('aSummary').textContent = r.count
+      ? T('{n} tệp', { n: r.count }) + (r.folders ? ', ' + T('{n} thư mục', { n: r.folders }) : '') + (r.sizes ? ' · ' + fmtSize(r.total) : '') + (r.encrypted ? ' · ' + T('có mật khẩu') : '')
+      : T('File nén trống.');
+    const frag = document.createDocumentFragment();
+    for (const e of r.entries) {
+      const row = document.createElement('div');
+      row.className = 'arc-row';
+      const nm = document.createElement('span'); nm.className = 'nm'; nm.title = e.name; nm.textContent = (e.dir ? '\u{1F4C1} ' : '') + e.name;
+      const sz = document.createElement('span'); sz.className = 'sz'; sz.textContent = !e.dir && r.sizes ? fmtSize(e.size) : '';
+      row.append(nm, sz);
+      frag.appendChild(row);
+    }
+    if (r.more) { const m = document.createElement('div'); m.className = 'arc-row'; m.textContent = T('… và {n} mục nữa', { n: r.more }); frag.appendChild(m); }
+    $('aList').appendChild(frag);
+    $('aGo').disabled = false;
+    if (!$('aDir').value) { $('aDir').value = r.defaultDir; }
+    $('aSubText').textContent = T('Tạo thư mục con "{n}"', { n: r.subName });
+    arcDest();
+  }
+  function arcDest() {
+    const sub = $('aSub').checked;
+    $('aDest').textContent = sub ? T('Sẽ giải nén vào một thư mục con mới') : T('Giải nén thẳng vào thư mục đã chọn');
+  }
+  function openArchive(t) {
+    arcTask = t;
+    $('aTitle').textContent = t.filename || T('Giải nén');
+    $('aPwd').value = '';
+    $('aPwdBox').style.display = 'none';
+    $('aDir').value = '';
+    $('aSub').checked = true;
+    $('aSubText').textContent = T('Tạo thư mục con riêng cho file nén này');
+    $('aGo').dataset.mode = 'extract';
+    openModal('mArc');
+    arcLoad(t, '');
+  }
+  $('aBrowse').addEventListener('click', async () => { const d = await bridge.chooseFolder($('aDir').value); if (d) { $('aDir').value = d; } });
+  $('aSub').addEventListener('change', arcDest);
+  $('aPwd').addEventListener('keydown', (e) => { if (e.key === 'Enter') { $('aGo').click(); } });
+  $('aGo').addEventListener('click', async () => {
+    const t = arcTask;
+    if (!t) { return; }
+    const pw = $('aPwd').value;
+    if ($('aGo').dataset.mode === 'password' && !pw) { $('aPwd').focus(); return; }
+    if ($('aGo').dataset.mode === 'password') { arcLoad(t, pw); $('aGo').dataset.mode = 'extract'; return; }
+    const dest = $('aDir').value.trim();
+    closeModals();
+    const r = await bridge.archiveExtract(t.id, { dest, sub: $('aSub').checked, password: pw });
+    if (r.ok) { return; }
+    if (r.needPassword) { openArchive(t); return; }
+    if (!r.handled) { toast(T('Không giải nén được'), true); }
+  });
   // Extract; an encrypted archive opens a small window asking for the password (and again when it was wrong).
   let pwdTask = null;
   async function extractWith(t, password, wrong) {
@@ -646,6 +722,53 @@
     $('nWeb').onclick = () => bridge.releaseNotes();
     openModal('mNew');
   }
+  // ---- download statistics
+  const STAT_TYPE = { video: 'Video', music: 'Âm thanh', archive: 'Nén', program: 'Chương trình', document: 'Tài liệu', other: 'Khác' };
+  async function openStats() {
+    const r = await bridge.statsGet();
+    if (!r) { return; }
+    const tiles = $('stTiles');
+    tiles.textContent = '';
+    for (const [label, v] of [[T('Hôm nay'), r.today], [T('7 ngày'), r.week], [T('30 ngày'), r.month], [T('Tổng cộng'), r.total]]) {
+      const d = document.createElement('div'); d.className = 'stat-tile';
+      const b = document.createElement('b'); b.textContent = fmtSize(v.bytes);
+      const sp = document.createElement('span'); sp.textContent = label + ' · ' + T('{n} tệp', { n: v.count });
+      d.append(b, sp); tiles.appendChild(d);
+    }
+    const chart = $('stChart');
+    chart.textContent = '';
+    const max = Math.max(1, ...r.days.map((x) => x.bytes));
+    for (const day of r.days) {
+      const bar = document.createElement('div'); bar.className = 'stat-bar' + (day.bytes ? '' : ' zero');
+      bar.title = day.date + ': ' + fmtSize(day.bytes) + ' (' + T('{n} tệp', { n: day.count }) + ')';
+      const i = document.createElement('i'); i.style.height = Math.max(2, Math.round((day.bytes / max) * 90)) + 'px';
+      const sm = document.createElement('small'); sm.textContent = day.date.slice(8);
+      bar.append(i, sm); chart.appendChild(bar);
+    }
+    const fill = (id, list, nameOf) => {
+      const box = $(id); box.textContent = '';
+      if (!list.length) { const e = document.createElement('div'); e.className = 'stat-empty'; e.textContent = T('Chưa có dữ liệu.'); box.appendChild(e); return; }
+      for (const x of list) {
+        const row = document.createElement('div'); row.className = 'stat-row';
+        const nm = document.createElement('span'); nm.className = 'nm'; nm.textContent = nameOf(x.name); nm.title = nameOf(x.name);
+        const v = document.createElement('span'); v.className = 'v'; v.textContent = fmtSize(x.bytes) + ' · ' + x.count;
+        row.append(nm, v); box.appendChild(row);
+      }
+    };
+    fill('stHosts', r.hosts, (n) => n);
+    fill('stTypes', r.types, (n) => T(STAT_TYPE[n] || 'Khác'));
+    $('stSince').textContent = T('Tính từ {d}', { d: fmtDate(r.since) });
+    closeModals();
+    openModal('mStat');
+  }
+  $('bStats').addEventListener('click', openStats);
+  let stSure = 0;
+  $('stReset').addEventListener('click', async () => {
+    if (!stSure) { $('stReset').textContent = T('Bấm lần nữa để xóa hết'); stSure = setTimeout(() => { stSure = 0; $('stReset').textContent = T('Xóa thống kê'); }, 4000); return; }
+    clearTimeout(stSure); stSure = 0; $('stReset').textContent = T('Xóa thống kê');
+    await bridge.statsReset(); openStats();
+  });
+
   // ---- "Lấy link từ trang": scan a web page, tick what to download
   let grab = { page: '', items: [] };
   const grabPick = new Set();

@@ -8,12 +8,14 @@ const {
 const { detectKind } = require('../core/manager');
 const { extractPageLinks, pageTitle } = require('../core/grab');
 const { DEFAULT_UA } = require('../core/http');
+const { Stats } = require('../core/stats');
+const { categoryOf } = require('../core/category');
 const { EngineClient } = require('../core/engine-client');
 const { createApi } = require('../core/api');
 const { folderFor } = require('../core/category');
 const { findDuplicate } = require('../core/dupes');
 const {
-  uniquePath, downloadLinkIn, plainNotes, parseImportList, isArchive, extractDirFor, extractCommands, explainExtractFailure, listCommand, parseListedTotal,
+  uniquePath, downloadLinkIn, plainNotes, parseImportList, isArchive, extractDirFor, extractDirIn, entriesCommand, parseListedEntries, extractCommands, explainExtractFailure, listCommand, parseListedTotal,
 } = require('../core/util');
 const { dueActions, effectiveLimitKB } = require('../core/schedule');
 const { execFile } = require('child_process');
@@ -138,18 +140,20 @@ function applyLimit() {
 // tar refuses entries that would land outside the target folder, so a hostile archive cannot overwrite other files.
 function extractArchive(file, password = '', hooks = {}) {
   return new Promise((resolve) => {
-    const dest = extractDirFor(file);
+    const dest = hooks.dest || extractDirFor(file);
+    const existed = fs.existsSync(dest); // a folder the user pointed at is never deleted, only one we made
+    const cleanup = () => { if (!existed) { try { fs.rmSync(dest, { recursive: true, force: true }); } catch { /* ignore */ } } };
     try { fs.mkdirSync(dest, { recursive: true }); } catch (e) { return resolve({ ok: false, error: e.message, attempts: [] }); }
     if (hooks.onDest) { hooks.onDest(dest); }
     const cmds = extractCommands(file, dest, { password, toolDir: settings.extractToolDir }); // WinRAR / 7-Zip when installed (better for .rar and .7z), then tar
     const attempts = [];
     const next = (i) => {
       if (hooks.cancelled && hooks.cancelled()) {
-        try { fs.rmSync(dest, { recursive: true, force: true }); } catch { /* ignore */ }
+        cleanup();
         return resolve({ ok: false, canceled: true, attempts });
       }
       if (i >= cmds.length) {
-        try { fs.rmSync(dest, { recursive: true, force: true }); } catch { /* the folder is new and ours: remove the leftovers of a failed try */ }
+        cleanup(); // the folder is new and ours: remove the leftovers of a failed try
         const detail = attempts.map((a) => `${a.name} (${a.code}): ${a.msg}`).join('\n');
         netLog.push(`${new Date().toISOString().slice(11, 19)} extract failed for ${path.basename(file)}: ${detail.replace(/\n/g, ' | ')}`);
         return resolve({ ok: false, error: attempts.length ? attempts[0].msg : '', attempts, reason: explainExtractFailure(attempts) });
@@ -240,20 +244,22 @@ function pushExtract(job) {
 }
 
 /** Extract `file` next to itself with a progress window. Resolves with the extractArchive result (plus needPassword for the caller). */
-async function runExtract(file, { password = '', auto = false } = {}) {
+async function runExtract(file, { password = '', auto = false, dest = '' } = {}) {
   const job = createExtractJob(file, auto);
   const st = job.state;
   try {
     st.total = await listTotal(file, password);
     st.phase = 'extract';
     pushExtract(job);
+    const baseline = dest && fs.existsSync(dest) ? await dirSize(dest) : 0; // what the chosen folder already held before we started
     job.poll = setInterval(async () => {
       if (!job.dest || job.win.isDestroyed()) { return; }
-      st.done = await dirSize(job.dest);
+      st.done = Math.max(0, (await dirSize(job.dest)) - baseline);
       st.percent = st.total ? Math.min(99, Math.floor((st.done / st.total) * 100)) : -1;
       pushExtract(job);
     }, 800);
     const r = await extractArchive(file, password, {
+      dest,
       onDest: (d) => { job.dest = d; },
       onStart: (name, child) => { job.child = child; st.tool = name; pushExtract(job); },
       cancelled: () => job.cancelled,
@@ -263,7 +269,7 @@ async function runExtract(file, { password = '', auto = false } = {}) {
     const gone = job.win.isDestroyed();
     if (r.ok) {
       st.phase = 'done'; st.percent = 100; st.tool = r.with || st.tool; job.dest = r.dir;
-      st.done = await dirSize(r.dir);
+      st.done = Math.max(0, (await dirSize(r.dir)) - baseline);
       if (gone || !job.shown) {
         if (!gone) { job.win.destroy(); }
         if (settings.notify && Notification.isSupported()) {
@@ -821,6 +827,49 @@ function registerIpc() {
     if (r.reason === 'password') { return { ok: false, needPassword: true, wrongPassword: !!pw, handled: true }; }
     return { ...r, handled: true };
   });
+  // Preview of what is inside an archive (names and sizes), before choosing where to extract it.
+  ipcMain.handle('archive:list', async (_e, id, password) => {
+    const t = manager.get(id);
+    const file = t && t.state.path;
+    if (!file || !fs.existsSync(file) || !isArchive(file)) { return { ok: false, error: 'not an archive' }; }
+    const pw = typeof password === 'string' ? password.slice(0, 256) : '';
+    const c = entriesCommand(file, { password: pw, toolDir: settings.extractToolDir });
+    if (!c) { return { ok: false, reason: 'password', needPassword: true }; }
+    return new Promise((resolve) => {
+      const child = execFile(c.exe, c.args, { timeout: 90 * 1000, windowsHide: true, maxBuffer: 256 * 1024 * 1024 }, (err, out, errOut) => {
+        if (err && !(err.code === 1 && c.name !== 'tar')) {
+          const msg = String(errOut || out || err.message || '');
+          const reason = explainExtractFailure([{ name: c.name, code: err.code, msg }]);
+          return resolve({ ok: false, reason, needPassword: reason === 'password', wrongPassword: reason === 'password' && !!pw });
+        }
+        const all = parseListedEntries(c.name, out);
+        const files = all.filter((x) => !x.dir);
+        const shown = all.slice(0, 1000).map((x) => ({ name: x.name, size: x.size, dir: x.dir }));
+        resolve({
+          ok: true, tool: c.name, count: files.length, folders: all.length - files.length, total: files.reduce((n, x) => n + x.size, 0),
+          sizes: c.name !== 'tar', encrypted: all.some((x) => x.encrypted), entries: shown, more: Math.max(0, all.length - shown.length),
+          defaultDir: path.dirname(file), subName: path.basename(extractDirFor(file)),
+        });
+      });
+      if (child.stdin) { child.stdin.on('error', () => {}); child.stdin.end(); }
+    });
+  });
+  // Extract into a folder chosen by the user ("dest"); `sub` puts everything in a new folder named after the archive.
+  ipcMain.handle('archive:extract', async (_e, id, o) => {
+    const t = manager.get(id);
+    const file = t && t.state.path;
+    if (!file || !fs.existsSync(file) || !isArchive(file)) { return { ok: false, error: 'not an archive' }; }
+    const base = String((o && o.dest) || '').trim() || path.dirname(file);
+    if (!path.isAbsolute(base)) { return { ok: false, error: 'bad folder' }; }
+    const dest = o && o.sub ? extractDirIn(file, base) : base;
+    const pw = o && typeof o.password === 'string' ? o.password.slice(0, 256) : '';
+    const r = await runExtract(file, { password: pw, dest });
+    if (r.ok) { return r; }
+    if (r.reason === 'password') { return { ok: false, needPassword: true, wrongPassword: !!pw, handled: true }; }
+    return { ...r, handled: true };
+  });
+  ipcMain.handle('stats:get', () => (stats ? stats.summary() : null));
+  ipcMain.handle('stats:reset', () => { if (stats) { stats.reset(); } return true; });
   ipcMain.handle('extract:get', (e) => { const j = extractJobs.get(e.sender.id); return j ? j.state : null; });
   ipcMain.handle('extract:cancel', (e) => {
     const j = extractJobs.get(e.sender.id);
@@ -1020,6 +1069,7 @@ function retryAfterWake() {
 }
 function forgetRetry(id) { const st = retryState.get(id); if (st && st.timer) { clearTimeout(st.timer); } retryState.delete(id); }
 
+let stats = null; // totals for the statistics window (created once the app is ready)
 const netLog = []; // recent connection problems / stalls reported by the engine, shown in the exported log
 function wireManager() {
   const throttle = new Map();
@@ -1035,6 +1085,11 @@ function wireManager() {
   manager.on('removed', (s) => { throttle.delete(s.id); forgetRetry(s.id); broadcast('dl:removed', s); checkAfterAll(); });
   manager.on('done', (s) => {
     forgetRetry(s.id);
+    try {
+      let host = '';
+      try { host = new URL(s.url).hostname.replace(/^www\./, ''); } catch { /* no host */ }
+      if (stats) { stats.record({ bytes: Math.max(s.size || 0, s.downloaded || 0), host, type: categoryOf(s.filename || s.url, s.kind) }); }
+    } catch { /* statistics never get in the way of a download */ }
     broadcast('dl:update', s);
     if (afterAll !== 'none') { afterArmed++; checkAfterAll(); }
     if (settings.autoExtract && s.path && s.kind === 'file' && isArchive(s.path)) { runExtract(s.path, { auto: true }); }
@@ -1229,6 +1284,7 @@ function main() {
       connections: settings.connections, speedLimit: settings.speedLimitKB * 1024,
     });
     await manager.ready; // the engine process has loaded the saved downloads
+    stats = new Stats(path.join(app.getPath('userData'), 'stats.json'));
     wireManager();
     registerIpc();
     registerNativeHost();

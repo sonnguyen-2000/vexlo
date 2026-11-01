@@ -142,6 +142,31 @@
     <footer><span class="grab-count" id="gCount"></span><span class="grow"></span><button class="btn" data-close>Đóng</button><button class="btn pri" id="gGo" disabled>Tải</button></footer>
   </div>
 </div>
+<div class="overlay" id="mStat">
+  <div class="modal wide" role="dialog" aria-label="Thống kê tải">
+    <header>Thống kê tải <button class="x" data-close><svg class="ic"><use href="#i-x"/></svg></button></header>
+    <div class="body">
+      <div class="stat-tiles" id="stTiles"></div>
+      <div class="stat-h" id="stChartT">14 ngày gần đây</div>
+      <div class="stat-chart" id="stChart"></div>
+      <div class="stat-cols"><div><div class="stat-h">Trang web tải nhiều nhất</div><div id="stHosts"></div></div><div><div class="stat-h">Theo loại tệp</div><div id="stTypes"></div></div></div>
+    </div>
+    <footer><span class="grab-count" id="stSince"></span><span class="grow"></span><button class="btn" id="stReset">Xóa thống kê</button><button class="btn pri" data-close>Đóng</button></footer>
+  </div>
+</div>
+<div class="overlay" id="mArc">
+  <div class="modal wide" role="dialog" aria-label="Giải nén">
+    <header><span id="aTitle">Giải nén</span> <button class="x" data-close><svg class="ic"><use href="#i-x"/></svg></button></header>
+    <div class="body">
+      <div class="hint" id="aSummary"></div>
+      <div class="grab-list" id="aList"></div>
+      <div class="field" id="aPwdBox"><label for="aPwd">File nén này có mật khẩu</label><input id="aPwd" type="password" autocomplete="off" spellcheck="false"><div class="hint err" id="aPwdMsg"></div></div>
+      <div class="field"><label for="aDir">Giải nén vào thư mục</label><div class="row"><input id="aDir" type="text" spellcheck="false"><button class="btn sm" id="aBrowse">Chọn…</button></div></div>
+      <label class="chk"><input type="checkbox" id="aSub" checked><span id="aSubText">Tạo thư mục con riêng cho file nén này</span></label>
+    </div>
+    <footer><span class="grab-count" id="aDest"></span><span class="grow"></span><button class="btn" data-close>Hủy</button><button class="btn pri" id="aGo">Giải nén</button></footer>
+  </div>
+</div>
 <div class="overlay" id="mPwd">
   <div class="modal narrow" role="dialog" aria-label="Mật khẩu file nén">
     <header>Mật khẩu file nén <button class="x" data-close><svg class="ic"><use href="#i-x"/></svg></button></header>
@@ -229,6 +254,9 @@
           <div class="row"><button class="btn sm" id="bExpList" type="button">Xuất danh sách tải</button><button class="btn sm" id="bImpList" type="button">Nhập danh sách tải</button></div>
           <div class="hint">Lưu danh sách tải hiện tại ra một tệp, hoặc nạp lại từ tệp đó (hay từ tệp văn bản mỗi dòng một link). Tiện khi cài lại máy.</div>
           <div class="hint" id="listMsg"></div></div>
+        <div class="field"><label>Thống kê</label>
+          <div class="row"><button class="btn sm" id="bStats" type="button">Xem thống kê tải</button></div>
+          <div class="hint">Dung lượng đã tải theo ngày, theo trang web và theo loại tệp. Chỉ lưu trên máy này.</div></div>
         <div class="field"><label>Chẩn đoán lỗi</label>
           <div class="row"><button class="btn sm" id="bLog" type="button">Xuất nhật ký lỗi</button></div>
           <div class="hint">Lưu một tệp văn bản (không chứa mã ghép nối và không chứa link tải) để đính kèm khi báo lỗi.</div>
