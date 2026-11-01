@@ -6,6 +6,7 @@ const { EventEmitter } = require('events');
 const { request, classifyStatus, HttpError } = require('./http');
 const { SpeedMeter, SpeedLimiter } = require('./limiter');
 const { pickFilename, sleep, uniquePath } = require('./util');
+const { folderFor } = require('./category');
 
 const MIN_SPLIT = 512 * 1024;      // never split a segment smaller than this
 const MIN_SEGMENT = 1024 * 1024;   // initial segment size lower bound
@@ -74,6 +75,7 @@ class Download extends EventEmitter {
       finalUrl: '',
       headers: opts.headers || {},
       dir: opts.dir,
+      autoBase: opts.autoBase || '',
       filename: opts.filename || '',
       userNamed: !!opts.filename,
       path: opts.path || '',
@@ -164,6 +166,8 @@ class Download extends EventEmitter {
       s.filename = pickFilename({
         contentDisposition: s.userNamed ? '' : info.contentDisposition, url: info.finalUrl, mime: info.mime, hint: s.userNamed ? s.filename : '',
       });
+      // The real name is only known now: when the app picks folders by type, file it under the right one (a .rar goes to Compressed, not Other).
+      if (s.autoBase && !s.userNamed) { s.dir = folderFor(s.autoBase, s.filename, 'file'); }
       s.path = this.resolvePath(s.dir, s.filename);
       s.filename = path.basename(s.path);
     }

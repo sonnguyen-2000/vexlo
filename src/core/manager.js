@@ -130,6 +130,7 @@ class DownloadManager extends EventEmitter {
     };
     const state = kind === 'file' ? Download.create(base) : SegmentedDownload.create({ ...base, kind, quality: opts.quality });
     state.kind = kind;
+    if (opts.autoBase && kind === 'file') { state.autoBase = String(opts.autoBase); }
     if (opts.pending) { state.pending = true; }
     if (Number(opts.limitKB) > 0) { state.limitKB = Math.round(Number(opts.limitKB)); }
     this._register(state);

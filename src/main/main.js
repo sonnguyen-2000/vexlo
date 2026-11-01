@@ -28,7 +28,7 @@ const DEFAULTS = {
   closeToTray: true, startWithOS: false, startHidden: true, notify: true, port: 6877, token: '', deleteMode: 'ask',
   progressWindow: true, progressFloat: true, progressAutoClose: true, progressOnError: 'ask',
   scheduleEnabled: false, scheduleStart: '01:00', scheduleStop: '', scheduleDays: [0, 1, 2, 3, 4, 5, 6],
-  autoUpdate: true, language: 'auto', clipboardWatch: false, autoExtract: false, proxyMode: 'off', proxyUrl: '',
+  autoUpdate: true, language: 'auto', clipboardWatch: false, autoExtract: false, extractToolDir: '', proxyMode: 'off', proxyUrl: '',
   limitWindowEnabled: false, limitWindowFrom: '08:00', limitWindowTo: '22:00', limitWindowKB: 500,
 };
 
@@ -72,6 +72,7 @@ function clampSettings(s) {
     autoUpdate: s.autoUpdate !== false,
     clipboardWatch: !!s.clipboardWatch,
     autoExtract: !!s.autoExtract,
+    extractToolDir: typeof s.extractToolDir === 'string' ? s.extractToolDir.trim().slice(0, 500) : '',
     proxyMode: ['off', 'system', 'custom'].includes(s.proxyMode) ? s.proxyMode : 'off',
     proxyUrl: typeof s.proxyUrl === 'string' ? s.proxyUrl.trim().slice(0, 300) : '',
     limitWindowEnabled: !!s.limitWindowEnabled,
@@ -138,7 +139,7 @@ function extractArchive(file, password = '', hooks = {}) {
     const dest = extractDirFor(file);
     try { fs.mkdirSync(dest, { recursive: true }); } catch (e) { return resolve({ ok: false, error: e.message, attempts: [] }); }
     if (hooks.onDest) { hooks.onDest(dest); }
-    const cmds = extractCommands(file, dest, { password }); // WinRAR / 7-Zip when installed (better for .rar and .7z), then tar
+    const cmds = extractCommands(file, dest, { password, toolDir: settings.extractToolDir }); // WinRAR / 7-Zip when installed (better for .rar and .7z), then tar
     const attempts = [];
     const next = (i) => {
       if (hooks.cancelled && hooks.cancelled()) {
@@ -198,7 +199,7 @@ async function dirSize(root, cap = 200000) {
 
 /** Total unpacked size read from the archive's listing (0 when the tools cannot tell: the window then shows a moving bar). */
 function listTotal(file, password) {
-  const c = listCommand(file, { password });
+  const c = listCommand(file, { password, toolDir: settings.extractToolDir });
   if (!c) { return Promise.resolve(0); }
   return new Promise((resolve) => {
     const child = execFile(c.exe, c.args, { timeout: 90 * 1000, windowsHide: true, maxBuffer: 256 * 1024 * 1024 }, (err, out) => {
@@ -282,7 +283,7 @@ async function runExtract(file, { password = '', auto = false } = {}) {
   } finally { clearInterval(job.poll); }
 }
 
-// ---- proxy: off, the Windows/system one, or typed by the user. Only HTTP proxies are used (not SOCKS).
+// ---- proxy: off, the Windows/system one, or typed by the user. HTTP and SOCKS5 proxies.
 let proxyTick = 0;
 async function applyProxy() {
   if (!manager) { return; }
@@ -291,8 +292,9 @@ async function applyProxy() {
   else if (settings.proxyMode === 'system') {
     try {
       const r = await session.defaultSession.resolveProxy('https://www.example.com');
-      const m = /^\s*(?:PROXY|HTTPS)\s+([^;\s]+)/i.exec(r || ''); // "PROXY host:port; DIRECT"; SOCKS or DIRECT mean no proxy here
-      url = m ? m[1] : '';
+      const m = /^\s*(?:PROXY|HTTPS)\s+([^;\s]+)/i.exec(r || ''); // "PROXY host:port; DIRECT" (first entry only)
+      const k = /^\s*SOCKS5?\s+([^;\s]+)/i.exec(r || '');
+      url = m ? m[1] : k ? 'socks5://' + k[1] : '';
     } catch { url = ''; }
   }
   if (manager && manager.proxy !== url) { manager.proxy = url; }
@@ -442,7 +444,7 @@ function handleExternalAdd(items) {
     const filename = it.filename || (replaceId ? dup.task.filename : undefined);
     const askNow = ask && !refreshed; // a link the user asked to refresh starts at once, no confirmation window
     const id = manager.add({
-      ...it, filename, replaceId, dir, connections: settings.connections, start: !askNow, pending: askNow,
+      ...it, filename, replaceId, dir, autoBase: settings.categorize && !it.filename ? settings.downloadDir : '', connections: settings.connections, start: !askNow, pending: askNow,
     });
     if (refreshed) { justRefreshed.set(rk, { at: Date.now(), id }); }
     if (askNow) { openConfirm(id, { replaced: !!replaceId }); } else if (items.length <= 3) { openProgress(id); }
@@ -612,7 +614,7 @@ function registerIpc() {
         const name = urls.length === 1 && o.filename ? o.filename : undefined;
         const dir = o.dir || categoryDir(name || url, kind);
         out.push(manager.add({
-          url, filename: name, dir, quality: o.quality, connections: Number(o.connections) || settings.connections, start: o.start !== false,
+          url, filename: name, dir, autoBase: settings.categorize && !o.dir && !name ? settings.downloadDir : '', quality: o.quality, connections: Number(o.connections) || settings.connections, start: o.start !== false,
         }));
       } catch (err) { errors.push({ url, error: err.message }); }
     }
@@ -763,7 +765,7 @@ function registerIpc() {
       const dup = findDuplicate(manager.list(), { url: it.url, filename: it.filename, dir, page: it.page, kind }, { exists: fs.existsSync });
       if (dup && dup.type === 'active') { skipped++; continue; }
       try {
-        manager.add({ url: it.url, filename: it.filename || undefined, kind, dir, connections: settings.connections, meta: it.page ? { page: it.page } : {}, start: true });
+        manager.add({ url: it.url, filename: it.filename || undefined, kind, dir, autoBase: settings.categorize && !it.filename ? settings.downloadDir : '', connections: settings.connections, meta: it.page ? { page: it.page } : {}, start: true });
         added++;
       } catch { skipped++; }
     }

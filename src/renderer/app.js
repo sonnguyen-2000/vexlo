@@ -572,6 +572,7 @@
     $('sUpd').checked = settings.autoUpdate !== false;
     $('sClip').checked = !!settings.clipboardWatch;
     $('sExtract').checked = !!settings.autoExtract;
+    $('sTool').value = settings.extractToolDir || '';
     $('sSchOn').checked = !!settings.scheduleEnabled;
     $('sSchStart').value = settings.scheduleStart || '01:00';
     $('sSchStop').value = settings.scheduleStop || '';
@@ -608,6 +609,7 @@
     document.querySelectorAll('.tabs button').forEach((x) => x.classList.toggle('on', x === b));
     document.querySelectorAll('.pane').forEach((p) => p.classList.toggle('on', p.id === 'p-' + b.dataset.tab));
   }));
+  $('sToolBrowse').addEventListener('click', async () => { const d = await bridge.chooseFolder($('sTool').value || 'C:\\Program Files'); if (d) { $('sTool').value = d; } });
   $('sBrowse').addEventListener('click', async () => { const d = await bridge.chooseFolder($('sDir').value); if (d) { $('sDir').value = d; } });
   $('bExt').addEventListener('click', () => bridge.openExtensionFolder());
   // ---- manual update check
@@ -672,7 +674,7 @@
   });
   $('sSave').addEventListener('click', async () => {
     settings = await bridge.setSettings({
-      downloadDir: $('sDir').value.trim(), categorize: $('sCat').checked, confirm: $('sConfirm').checked, notify: $('sNotify').checked, language: $('sLang').value, progressWindow: $('sProg').checked, progressFloat: $('sFloat').checked, progressOnError: $('sOnErr').value, autoUpdate: $('sUpd').checked, clipboardWatch: $('sClip').checked, autoExtract: $('sExtract').checked,
+      downloadDir: $('sDir').value.trim(), categorize: $('sCat').checked, confirm: $('sConfirm').checked, notify: $('sNotify').checked, language: $('sLang').value, progressWindow: $('sProg').checked, progressFloat: $('sFloat').checked, progressOnError: $('sOnErr').value, autoUpdate: $('sUpd').checked, clipboardWatch: $('sClip').checked, autoExtract: $('sExtract').checked, extractToolDir: $('sTool').value.trim(),
       scheduleEnabled: $('sSchOn').checked, scheduleStart: $('sSchStart').value, scheduleStop: $('sSchStop').value,
       scheduleDays: [0, 1, 2, 3, 4, 5, 6].filter((d) => $('sDay' + d).checked), deleteMode: $('sDelete').value,
       closeToTray: $('sTray').checked, startWithOS: $('sStart').checked, startHidden: $('sHidden').checked, connections: Number($('sConn').value),

@@ -42,7 +42,8 @@ function makeProxy(auth) {
 test('setProxy: accepts host:port, URLs with credentials, and rejects junk', () => {
   assert.equal(setProxy('127.0.0.1:8080'), true);
   assert.equal(setProxy('http://user:p%40ss@proxy.example:3128'), true);
-  assert.equal(setProxy('socks5://127.0.0.1:1080'), false);
+  assert.equal(setProxy('socks5://127.0.0.1:1080'), true);
+  assert.equal(setProxy('ftp://127.0.0.1:21'), false);
   assert.equal(setProxy('http://'), false);
   assert.equal(setProxy(''), true);
 });

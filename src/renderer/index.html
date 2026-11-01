@@ -160,6 +160,8 @@
           <div class="hint">Mục chưa tải xong thì chỉ xóa dữ liệu tải dở của chính nó.</div></div>
         <label class="chk"><input type="checkbox" id="sProg"><span>Hiện cửa sổ nhỏ theo dõi tiến độ khi bắt đầu tải<small>Giống IDM: tốc độ, thời gian còn lại, tạm dừng/hủy ngay trên cửa sổ đó</small></span></label>
         <label class="chk"><input type="checkbox" id="sExtract"><span>Tự giải nén file nén sau khi tải xong<small>.zip, .7z, .rar, .tar... được giải nén vào một thư mục cùng tên, ngay cạnh file. File nén gốc được giữ lại. Dùng WinRAR hoặc 7-Zip nếu máy có.</small></span></label>
+        <div class="field"><label for="sTool">Thư mục chứa WinRAR hoặc 7-Zip (tùy chọn)</label><div class="row"><input id="sTool" type="text" placeholder="Để trống: tự tìm trong Program Files" spellcheck="false"><button class="btn sm" id="sToolBrowse">Chọn…</button></div>
+          <div class="hint">Chỉ cần khi bạn dùng bản portable hoặc cài ở nơi khác. Thư mục phải chứa UnRAR.exe, WinRAR.exe hoặc 7z.exe.</div></div>
         <label class="chk"><input type="checkbox" id="sClip"><span>Gợi ý tải khi bạn sao chép một link file<small>Chép link .zip, .mp4, .exe... là Vexlo hiện thông báo, bấm vào để tải. Mặc định tắt</small></span></label>
         <label class="chk"><input type="checkbox" id="sFloat"><span>Cửa sổ tiến độ nổi lên trên các ứng dụng khác lúc bắt đầu tải<small>Hiện lên phía trước một lần cho bạn biết, sau đó chuyển sang ứng dụng khác thì nó bị che. Tắt để chạy âm thầm</small></span></label>
         <div class="field"><label for="sOnErr">Khi tải bị lỗi, cửa sổ tiến độ</label>
@@ -177,7 +179,7 @@
         <div class="field"><label for="sLimit">Giới hạn tốc độ (KB/s, 0 = không giới hạn)</label><input id="sLimit" type="number" min="0" step="100"><div class="hint">Áp dụng cho tổng tốc độ của mọi tệp.</div></div>
         <div class="field"><label for="sProxyMode">Proxy khi tải</label>
           <select id="sProxyMode"><option value="off">Không dùng proxy</option><option value="system">Theo cài đặt của Windows</option><option value="custom">Tự nhập địa chỉ</option></select>
-          <input id="sProxyUrl" type="text" placeholder="127.0.0.1:8080 hoặc http://tên:mật-khẩu@máy-chủ:8080" spellcheck="false">
+          <input id="sProxyUrl" type="text" placeholder="127.0.0.1:8080, http://tên:mật-khẩu@máy-chủ:8080 hoặc socks5://127.0.0.1:1080" spellcheck="false">
           <div class="hint">Chỉ hỗ trợ proxy HTTP/HTTPS, không hỗ trợ SOCKS. Địa chỉ nội bộ như localhost luôn đi thẳng. Cần bấm Lưu để áp dụng.</div></div>
         <label class="chk"><input type="checkbox" id="sLimWin"><span>Giới hạn tốc độ riêng trong một khoảng giờ<small>Ví dụ ban ngày chỉ dùng 500 KB/s để còn mạng cho việc khác, ngoài khoảng giờ này thì dùng giới hạn ở trên. Khoảng giờ có thể qua nửa đêm.</small></span></label>
         <div class="grid2">

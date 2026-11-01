@@ -171,13 +171,17 @@ function extractDirFor(file) {
  * and 7-Zip in their usual folders and always ends with tar (built into Windows 10+, also fine for zip/tar).
  * @returns {{name:string, exe:string, args:string[]}[]}
  */
-function extractCommands(file, dest, { platform = process.platform, env = process.env, exists = fs.existsSync, password = '' } = {}) {
+function extractCommands(file, dest, { platform = process.platform, env = process.env, exists = fs.existsSync, password = '', toolDir = '' } = {}) {
   const ext = (/\.([a-z0-9]+)$/i.exec(file) || [])[1] || '';
   const tar = { name: 'tar', exe: platform === 'win32' ? path.win32.join(env.SystemRoot || 'C:\\Windows', 'System32', 'tar.exe') : 'tar', args: ['-xf', file, '-C', dest] };
   const pw = String(password || '');
   if (platform !== 'win32') { return pw ? [] : [tar]; } // tar cannot open encrypted archives
   const roots = [...new Set([env.ProgramFiles, env['ProgramFiles(x86)'], env.ProgramW6432, 'C:\\Program Files', 'C:\\Program Files (x86)'].filter(Boolean))];
-  const find = (rel) => { for (const r of roots) { const f = path.win32.join(r, rel); if (exists(f)) { return f; } } return ''; };
+  const find = (rel) => {
+    if (toolDir) { const c = path.win32.join(toolDir, path.win32.basename(rel)); if (exists(c)) { return c; } } // folder chosen by the user (portable installs)
+    for (const r of roots) { const f = path.win32.join(r, rel); if (exists(f)) { return f; } }
+    return '';
+  };
   const withSlash = dest.endsWith('\\') ? dest : dest + '\\';
   const found = [];
   const unrar = find('WinRAR\\UnRAR.exe');
@@ -196,10 +200,14 @@ function extractCommands(file, dest, { platform = process.platform, env = proces
  * The command that lists an archive with the size of every file, so the extraction window can show a real percentage.
  * Only UnRAR (rar) and 7-Zip can do it; null means "no percentage, show a moving bar instead".
  */
-function listCommand(file, { platform = process.platform, env = process.env, exists = fs.existsSync, password = '' } = {}) {
+function listCommand(file, { platform = process.platform, env = process.env, exists = fs.existsSync, password = '', toolDir = '' } = {}) {
   if (platform !== 'win32') { return null; }
   const roots = [...new Set([env.ProgramFiles, env['ProgramFiles(x86)'], env.ProgramW6432, 'C:\\Program Files', 'C:\\Program Files (x86)'].filter(Boolean))];
-  const find = (rel) => { for (const r of roots) { const f = path.win32.join(r, rel); if (exists(f)) { return f; } } return ''; };
+  const find = (rel) => {
+    if (toolDir) { const c = path.win32.join(toolDir, path.win32.basename(rel)); if (exists(c)) { return c; } } // folder chosen by the user (portable installs)
+    for (const r of roots) { const f = path.win32.join(r, rel); if (exists(f)) { return f; } }
+    return '';
+  };
   const pw = String(password || '');
   const ext = ((/\.([a-z0-9]+)$/i.exec(file) || [])[1] || '').toLowerCase();
   const unrar = find('WinRAR\\UnRAR.exe');
