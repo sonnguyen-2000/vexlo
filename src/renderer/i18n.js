@@ -99,6 +99,7 @@
     'Dung lượng đã tải theo ngày, theo trang web và theo loại tệp. Chỉ lưu trên máy này.': 'Amount downloaded per day, per web site and per file type. Stored on this computer only.',
     '14 ngày gần đây': 'Last 14 days', 'Trang web tải nhiều nhất': 'Most downloaded sites', 'Theo loại tệp': 'By file type', 'Xóa thống kê': 'Clear statistics',
     'Hôm nay': 'Today', '7 ngày': '7 days', '30 ngày': '30 days', 'Tổng cộng': 'Total', 'Chưa có dữ liệu.': 'No data yet.', 'Tính từ {d}': 'Since {d}', 'Bấm lần nữa để xóa hết': 'Click again to clear everything',
+    'Giao diện': 'Appearance', 'Theo hệ thống': 'Follow the system', 'Sáng': 'Light', 'Tối': 'Dark',
     'Tự giải nén file nén sau khi tải xong': 'Extract archives automatically after downloading', '.zip, .7z, .rar, .tar... được giải nén vào một thư mục cùng tên, ngay cạnh file. File nén gốc được giữ lại. Dùng WinRAR hoặc 7-Zip nếu máy có.': '.zip, .7z, .rar, .tar... are extracted into a folder with the same name next to the file. The original archive is kept. Uses WinRAR or 7-Zip if installed.',
     'Giải nén tại đây': 'Extract here', 'Đang giải nén...': 'Extracting...', 'Đã giải nén': 'Extracted', 'Không giải nén được': 'Could not extract',
     'Cập nhật & công cụ': 'Updates & tools', 'Danh sách tải': 'Download list', 'Chẩn đoán lỗi': 'Troubleshooting',

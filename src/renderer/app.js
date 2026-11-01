@@ -642,6 +642,7 @@
     $('sCat').checked = !!settings.categorize;
     $('sConfirm').checked = !!settings.confirm;
     $('sLang').value = settings.language || 'auto';
+    $('sTheme').value = settings.theme || 'system';
     $('sProg').checked = settings.progressWindow !== false;
     $('sFloat').checked = settings.progressFloat !== false;
     $('sOnErr').value = settings.progressOnError || 'ask';
@@ -882,7 +883,7 @@
   });
   $('sSave').addEventListener('click', async () => {
     settings = await bridge.setSettings({
-      downloadDir: $('sDir').value.trim(), categorize: $('sCat').checked, confirm: $('sConfirm').checked, notify: $('sNotify').checked, language: $('sLang').value, progressWindow: $('sProg').checked, progressFloat: $('sFloat').checked, progressOnError: $('sOnErr').value, autoUpdate: $('sUpd').checked, clipboardWatch: $('sClip').checked, autoExtract: $('sExtract').checked, extractToolDir: $('sTool').value.trim(),
+      downloadDir: $('sDir').value.trim(), categorize: $('sCat').checked, confirm: $('sConfirm').checked, notify: $('sNotify').checked, language: $('sLang').value, theme: $('sTheme').value, progressWindow: $('sProg').checked, progressFloat: $('sFloat').checked, progressOnError: $('sOnErr').value, autoUpdate: $('sUpd').checked, clipboardWatch: $('sClip').checked, autoExtract: $('sExtract').checked, extractToolDir: $('sTool').value.trim(),
       scheduleEnabled: $('sSchOn').checked, scheduleStart: $('sSchStart').value, scheduleStop: $('sSchStop').value,
       scheduleDays: [0, 1, 2, 3, 4, 5, 6].filter((d) => $('sDay' + d).checked), deleteMode: $('sDelete').value,
       closeToTray: $('sTray').checked, startWithOS: $('sStart').checked, startHidden: $('sHidden').checked, connections: Number($('sConn').value),

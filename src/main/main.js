@@ -32,7 +32,7 @@ const DEFAULTS = {
   closeToTray: true, startWithOS: false, startHidden: true, notify: true, port: 6877, token: '', deleteMode: 'ask',
   progressWindow: true, progressFloat: true, progressAutoClose: true, progressOnError: 'ask',
   scheduleEnabled: false, scheduleStart: '01:00', scheduleStop: '', scheduleDays: [0, 1, 2, 3, 4, 5, 6],
-  autoUpdate: true, language: 'auto', clipboardWatch: false, autoExtract: false, extractToolDir: '', proxyMode: 'off', proxyUrl: '',
+  autoUpdate: true, language: 'auto', theme: 'system', clipboardWatch: false, autoExtract: false, extractToolDir: '', proxyMode: 'off', proxyUrl: '',
   limitWindowEnabled: false, limitWindowFrom: '08:00', limitWindowTo: '22:00', limitWindowKB: 500,
 };
 
@@ -66,6 +66,7 @@ function clampSettings(s) {
     notify: !!s.notify,
     progressWindow: s.progressWindow !== false,
     language: ['auto', 'vi', 'en'].includes(s.language) ? s.language : 'auto',
+    theme: ['system', 'light', 'dark'].includes(s.theme) ? s.theme : 'system',
     progressFloat: s.progressFloat !== false,
     progressAutoClose: s.progressAutoClose !== false,
     progressOnError: ['ask', 'close', 'keep'].includes(s.progressOnError) ? s.progressOnError : 'ask',
@@ -106,6 +107,7 @@ function loadSettings() {
   let saved = {};
   try { saved = JSON.parse(fs.readFileSync(settingsFile(), 'utf8')); } catch { /* first run */ }
   settings = clampSettings({ ...DEFAULTS, downloadDir: app.getPath('downloads'), ...saved });
+  try { nativeTheme.themeSource = settings.theme; } catch { /* keep the system theme */ } // before any window exists: no flash of the wrong colours
   saveSettings();
 }
 
@@ -309,6 +311,7 @@ async function applyProxy() {
 }
 
 function applySettings(prev) {
+  try { nativeTheme.themeSource = settings.theme; } catch { /* keep the system theme */ } // every window follows: the CSS reads prefers-color-scheme
   manager.downloadDir = settings.downloadDir;
   manager.connections = settings.connections;
   manager.setMaxConcurrent(settings.maxConcurrent);
