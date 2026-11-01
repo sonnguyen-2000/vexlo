@@ -6,6 +6,8 @@ const {
   app, BrowserWindow, Tray, Menu, ipcMain, dialog, shell, clipboard, Notification, nativeImage, nativeTheme, screen, net, session, powerMonitor,
 } = require('electron');
 const { detectKind } = require('../core/manager');
+const { extractPageLinks, pageTitle } = require('../core/grab');
+const { DEFAULT_UA } = require('../core/http');
 const { EngineClient } = require('../core/engine-client');
 const { createApi } = require('../core/api');
 const { folderFor } = require('../core/category');
@@ -770,6 +772,42 @@ function registerIpc() {
       } catch { skipped++; }
     }
     return { added, skipped, total: list.length };
+  });
+  // "Lấy link từ trang": read a web page and list what it links to; the user ticks what to download.
+  ipcMain.handle('grab:scan', async (_e, rawUrl) => {
+    const url = String(rawUrl || '').trim();
+    if (!/^https?:\/\//i.test(url)) { return { error: 'url' }; }
+    const ac = new AbortController();
+    const timer = setTimeout(() => ac.abort(), 25000);
+    try {
+      const res = await net.fetch(url, { signal: ac.signal, headers: { 'user-agent': DEFAULT_UA, accept: 'text/html,application/xhtml+xml,*/*;q=0.8' } });
+      if (!res.ok) { return { error: 'http', status: res.status }; }
+      const type = String(res.headers.get('content-type') || '');
+      if (type && !/html|xml|text/i.test(type)) { return { error: 'notpage', type }; }
+      const html = (await res.text()).slice(0, 12 * 1024 * 1024);
+      const items = extractPageLinks(html, res.url || url).slice(0, 5000);
+      return { ok: true, url: res.url || url, title: pageTitle(html), items };
+    } catch (err) {
+      return { error: ac.signal.aborted ? 'timeout' : 'net', message: err && err.message };
+    } finally { clearTimeout(timer); }
+  });
+  ipcMain.handle('grab:add', (_e, o) => {
+    const page = String((o && o.page) || '');
+    const list = (Array.isArray(o && o.items) ? o.items : []).slice(0, 1000);
+    let added = 0; let skipped = 0;
+    for (const it of list) {
+      const url = String((it && it.url) || '');
+      if (!/^https?:\/\//i.test(url)) { skipped++; continue; }
+      const kind = detectKind(url, undefined);
+      const dir = categoryDir(url, kind);
+      const dup = findDuplicate(manager.list(), { url, dir, kind }, { exists: fs.existsSync });
+      if (dup && dup.type === 'active') { skipped++; continue; }
+      try {
+        manager.add({ url, kind, dir, autoBase: settings.categorize ? settings.downloadDir : '', headers: page ? { referer: page } : {}, connections: settings.connections, meta: page ? { page, referer: page } : {}, start: true });
+        added++;
+      } catch { skipped++; }
+    }
+    return { added, skipped };
   });
   // Windows Defender scan of one downloaded file (report only: nothing is removed without the user deciding).
   ipcMain.handle('dl:extract', async (_e, id, password) => {

@@ -646,6 +646,91 @@
     $('nWeb').onclick = () => bridge.releaseNotes();
     openModal('mNew');
   }
+  // ---- "Lấy link từ trang": scan a web page, tick what to download
+  let grab = { page: '', items: [] };
+  const grabPick = new Set();
+  const GRAB_TAG = { video: 'Video', music: 'Âm thanh', archive: 'Nén', program: 'Chương trình', document: 'Tài liệu', image: 'Ảnh', other: 'Khác' };
+  function grabVisible() {
+    const kind = $('gType').value;
+    const q = $('gFind').value.trim().toLowerCase();
+    return grab.items.filter((it) => {
+      if (kind === 'files') { if (it.page || it.type === 'image') { return false; } }
+      else if (kind === 'page') { if (!it.page) { return false; } }
+      else if (kind !== 'all' && it.type !== kind) { return false; }
+      return !q || (it.name + ' ' + it.text + ' ' + it.url).toLowerCase().includes(q);
+    });
+  }
+  function grabRender() {
+    const list = grabVisible();
+    const box = $('gList');
+    box.textContent = '';
+    const frag = document.createDocumentFragment();
+    for (const it of list.slice(0, 600)) {
+      const row = document.createElement('label');
+      row.className = 'grab-row';
+      const cb = document.createElement('input');
+      cb.type = 'checkbox'; cb.checked = grabPick.has(it.url);
+      cb.addEventListener('change', () => { if (cb.checked) { grabPick.add(it.url); } else { grabPick.delete(it.url); } grabCount(); });
+      const nm = document.createElement('span');
+      nm.className = 'nm'; nm.title = it.url;
+      nm.textContent = it.name || it.text || it.url;
+      if (it.text && it.name && it.text !== it.name) { const sm = document.createElement('small'); sm.textContent = it.text; nm.appendChild(sm); }
+      const tg = document.createElement('span');
+      tg.className = 'tg'; tg.textContent = it.page ? T('Trang web') : T(GRAB_TAG[it.type] || 'Khác');
+      row.append(cb, nm, tg);
+      frag.appendChild(row);
+    }
+    box.appendChild(frag);
+    grabCount(list.length);
+  }
+  function grabCount(shown) {
+    const n = grabPick.size;
+    if (shown !== undefined) { $('gCount').textContent = T('Hiển thị {a} / {b} mục', { a: Math.min(shown, 600), b: grab.items.length }) + (shown > 600 ? ' ' + T('(lọc bớt để thấy hết)') : ''); }
+    $('gGo').disabled = n === 0;
+    $('gGo').textContent = n ? T('Tải {n} mục', { n }) : T('Tải');
+  }
+  function openGrab(url) {
+    grab = { page: '', items: [] };
+    grabPick.clear();
+    $('gList').textContent = ''; $('gTools').style.display = 'none'; $('gCount').textContent = ''; grabCount();
+    $('gUrl').value = url || '';
+    $('gMsg').textContent = T('Vexlo đọc trang và liệt kê các file, ảnh, video mà trang đó liên kết tới. Trang cần đăng nhập hoặc tải nội dung bằng JavaScript có thể thiếu mục.');
+    openModal('mGrab');
+    $('gUrl').focus();
+  }
+  async function grabScan() {
+    const url = $('gUrl').value.trim();
+    if (!/^https?:\/\//i.test(url)) { $('gMsg').textContent = T('Hãy nhập địa chỉ bắt đầu bằng http:// hoặc https://'); return; }
+    $('gScan').disabled = true;
+    $('gMsg').textContent = T('Đang đọc trang…');
+    const r = await bridge.grabScan(url);
+    $('gScan').disabled = false;
+    if (!r || !r.ok) {
+      const why = { http: T('Trang trả về lỗi HTTP {s}.', { s: r && r.status }), notpage: T('Địa chỉ này là một file, không phải trang web. Hãy dùng "Thêm link".'), timeout: T('Trang không phản hồi (quá 25 giây).'), url: T('Địa chỉ không hợp lệ.') }[r && r.error] || T('Không đọc được trang. Kiểm tra mạng hoặc địa chỉ.');
+      $('gMsg').textContent = why;
+      return;
+    }
+    grab = { page: r.url, items: r.items };
+    grabPick.clear();
+    $('gType').value = r.items.some((i) => !i.page && i.type !== 'image') ? 'files' : 'all';
+    $('gTools').style.display = 'flex';
+    $('gMsg').textContent = r.items.length ? T('Tìm thấy {n} mục trên: {t}', { n: r.items.length, t: r.title || hostOf(r.url) }) : T('Trang này không có link nào để tải.');
+    grabRender();
+  }
+  $('bGrab').addEventListener('click', () => openGrab(''));
+  $('gScan').addEventListener('click', grabScan);
+  $('gUrl').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); grabScan(); } });
+  $('gType').addEventListener('change', grabRender);
+  $('gFind').addEventListener('input', grabRender);
+  $('gAll').addEventListener('click', () => { for (const it of grabVisible()) { grabPick.add(it.url); } grabRender(); });
+  $('gNone').addEventListener('click', () => { for (const it of grabVisible()) { grabPick.delete(it.url); } grabRender(); });
+  $('gGo').addEventListener('click', async () => {
+    const chosen = grab.items.filter((i) => grabPick.has(i.url)).map((i) => ({ url: i.url }));
+    if (!chosen.length) { return; }
+    const r = await bridge.grabAdd({ page: grab.page, items: chosen });
+    closeModals();
+    toast(T('Đã thêm {a} mục vào danh sách tải.', { a: r.added }) + (r.skipped ? ' ' + T('Bỏ qua {s} mục đã có.', { s: r.skipped }) : ''));
+  });
   $('sProxyMode').addEventListener('change', () => { $('sProxyUrl').style.display = $('sProxyMode').value === 'custom' ? '' : 'none'; });
   $('sStart').addEventListener('change', () => { $('sHidden').disabled = !$('sStart').checked; });
   $('bNotes').addEventListener('click', () => showNews(false));

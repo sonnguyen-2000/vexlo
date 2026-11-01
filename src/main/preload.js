@@ -36,6 +36,8 @@ contextBridge.exposeInMainWorld('vexlo', {
   extractFolder: call('extract:folder'),
   extractClose: call('extract:close'),
   whatsNew: call('app:whatsNew'),
+  grabScan: call('grab:scan'),
+  grabAdd: call('grab:add'),
   exportLog: call('app:exportLog'),
   updateStatus: call('update:status'),
   updateInstall: call('update:install'),

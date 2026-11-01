@@ -41,6 +41,7 @@
 <div class="app">
   <div class="toolbar" id="toolbar">
     <button class="tb primary" id="bAdd" title="Thêm link (Ctrl+N)"><svg class="ic"><use href="#i-plus"/></svg><span>Thêm link</span></button>
+    <button class="tb" id="bGrab" title="Lấy danh sách file, ảnh, video từ một trang web để chọn tải hàng loạt"><svg class="ic"><use href="#i-link"/></svg><span>Lấy link từ trang</span></button>
     <button class="tb" id="bResume" title="Tiếp tục"><svg class="ic"><use href="#i-play"/></svg><span>Tiếp tục</span></button>
     <button class="tb" id="bPause" title="Tạm dừng"><svg class="ic"><use href="#i-pause"/></svg><span>Tạm dừng</span></button>
     <button class="tb" id="bPauseAll" title="Dừng tất cả"><svg class="ic"><use href="#i-stop"/></svg><span>Dừng tất cả</span></button>
@@ -122,6 +123,23 @@
     <header><span id="nTitle">Có gì mới</span> <button class="x" data-close><svg class="ic"><use href="#i-x"/></svg></button></header>
     <div class="body"><div class="notes" id="nText"></div></div>
     <footer><button class="btn" id="nWeb">Mở trang phát hành</button><button class="btn pri" data-close>Đã hiểu</button></footer>
+  </div>
+</div>
+<div class="overlay" id="mGrab">
+  <div class="modal wide" role="dialog" aria-label="Lấy link từ trang">
+    <header>Lấy link từ trang <button class="x" data-close><svg class="ic"><use href="#i-x"/></svg></button></header>
+    <div class="body">
+      <div class="field"><label for="gUrl">Địa chỉ trang web</label>
+        <div class="row"><input id="gUrl" type="text" placeholder="https://..." spellcheck="false"><button class="btn pri sm" id="gScan">Quét</button></div>
+        <div class="hint" id="gMsg">Vexlo đọc trang và liệt kê các file, ảnh, video mà trang đó liên kết tới. Trang cần đăng nhập hoặc tải nội dung bằng JavaScript có thể thiếu mục.</div></div>
+      <div class="grab-tools" id="gTools">
+        <select id="gType"><option value="files">File (không gồm ảnh, trang)</option><option value="all">Tất cả</option><option value="video">Video</option><option value="music">Âm thanh</option><option value="archive">File nén</option><option value="program">Chương trình</option><option value="document">Tài liệu</option><option value="image">Ảnh</option><option value="page">Trang web</option></select>
+        <input id="gFind" type="text" placeholder="Lọc theo tên…" spellcheck="false">
+        <button class="btn sm" id="gAll">Chọn hết</button><button class="btn sm" id="gNone">Bỏ chọn</button>
+      </div>
+      <div class="grab-list" id="gList"></div>
+    </div>
+    <footer><span class="grab-count" id="gCount"></span><span class="grow"></span><button class="btn" data-close>Đóng</button><button class="btn pri" id="gGo" disabled>Tải</button></footer>
   </div>
 </div>
 <div class="overlay" id="mPwd">

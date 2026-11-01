@@ -190,3 +190,20 @@ body.confirm{overflow:auto;background:var(--panel)}
 
 .notes{white-space:pre-wrap;line-height:1.55;font-size:13px;max-height:55vh;overflow:auto;user-select:text}
 .field .hint.err{color:var(--bad)}
+
+.modal.wide{width:min(760px,96vw)}
+.grab-tools{display:flex;gap:8px;align-items:center;margin:4px 0 8px}
+.grab-tools select,.grab-tools input{padding:7px 9px;border:1px solid var(--line);border-radius:8px;background:var(--panel2);color:var(--fg);font:inherit;outline:0}
+.grab-tools input{flex:1;min-width:0}
+.grab-list{border:1px solid var(--line);border-radius:8px;max-height:46vh;overflow:auto;background:var(--panel2)}
+.grab-list:empty{display:none}
+.grab-row{display:flex;align-items:center;gap:10px;padding:6px 10px;border-bottom:1px solid var(--line);cursor:pointer}
+.grab-row:last-child{border-bottom:0}
+.grab-row:hover{background:var(--hover)}
+.grab-row .nm{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.grab-row .nm small{display:block;color:var(--mut);overflow:hidden;text-overflow:ellipsis}
+.grab-row .tg{color:var(--mut);font-size:12px;flex:none}
+.grab-count{color:var(--mut);font-size:13px}
+.grow{flex:1}
+#gTools{display:none}
+.field .row #gUrl{flex:1;width:auto;min-width:0}
