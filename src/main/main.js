@@ -8,6 +8,8 @@ const {
 const { detectKind } = require('../core/manager');
 const { extractPageLinks, pageTitle } = require('../core/grab');
 const { DEFAULT_UA } = require('../core/http');
+const coreHttp = require('../core/http');
+const ytdlp = require('../core/ytdlp');
 const { Stats } = require('../core/stats');
 const { categoryOf } = require('../core/category');
 const { EngineClient } = require('../core/engine-client');
@@ -32,7 +34,7 @@ const DEFAULTS = {
   closeToTray: true, startWithOS: false, startHidden: true, notify: true, port: 6877, token: '', deleteMode: 'ask',
   progressWindow: true, progressFloat: true, progressAutoClose: true, progressOnError: 'ask',
   scheduleEnabled: false, scheduleStart: '01:00', scheduleStop: '', scheduleDays: [0, 1, 2, 3, 4, 5, 6],
-  autoUpdate: true, language: 'auto', theme: 'system', clipboardWatch: false, autoExtract: false, extractToolDir: '', proxyMode: 'off', proxyUrl: '',
+  autoUpdate: true, language: 'auto', theme: 'system', mediaCookies: 'none', clipboardWatch: false, autoExtract: false, extractToolDir: '', proxyMode: 'off', proxyUrl: '',
   limitWindowEnabled: false, limitWindowFrom: '08:00', limitWindowTo: '22:00', limitWindowKB: 500,
 };
 
@@ -67,6 +69,7 @@ function clampSettings(s) {
     progressWindow: s.progressWindow !== false,
     language: ['auto', 'vi', 'en'].includes(s.language) ? s.language : 'auto',
     theme: ['system', 'light', 'dark'].includes(s.theme) ? s.theme : 'system',
+    mediaCookies: ['none', 'firefox', 'chrome', 'edge', 'brave'].includes(s.mediaCookies) ? s.mediaCookies : 'none',
     progressFloat: s.progressFloat !== false,
     progressAutoClose: s.progressAutoClose !== false,
     progressOnError: ['ask', 'close', 'keep'].includes(s.progressOnError) ? s.progressOnError : 'ask',
@@ -293,6 +296,13 @@ async function runExtract(file, { password = '', auto = false, dest = '' } = {})
   } finally { clearInterval(job.poll); }
 }
 
+// ---- YouTube / TikTok / Facebook through yt-dlp (downloaded once into the app's data folder, see core/ytdlp.js)
+const toolsDir = () => path.join(app.getPath('userData'), 'tools');
+function mediaConfig() {
+  // Vexlo itself can act as the JavaScript runtime YouTube needs (ELECTRON_RUN_AS_NODE), so nothing else has to be installed.
+  return { cookies: settings.mediaCookies === 'none' ? '' : settings.mediaCookies, jsRuntime: process.execPath };
+}
+
 // ---- proxy: off, the Windows/system one, or typed by the user. HTTP and SOCKS5 proxies.
 let proxyTick = 0;
 async function applyProxy() {
@@ -308,6 +318,7 @@ async function applyProxy() {
     } catch { url = ''; }
   }
   if (manager && manager.proxy !== url) { manager.proxy = url; }
+  coreHttp.setProxy(url); // the app itself downloads yt-dlp with it
 }
 
 function applySettings(prev) {
@@ -317,6 +328,7 @@ function applySettings(prev) {
   manager.setMaxConcurrent(settings.maxConcurrent);
   appliedLimit = -1;
   applyLimit();
+  manager.media = mediaConfig();
   try { app.setLoginItemSettings({ openAtLogin: settings.startWithOS, path: process.execPath, args: settings.startHidden ? ['--hidden'] : [] }); } catch { /* unsupported platform */ }
   if (!prev || prev.port !== settings.port || prev.token !== settings.token) { startApi(); }
   setClipboardWatch(settings.clipboardWatch);
@@ -335,7 +347,8 @@ function setClipboardWatch(on) {
     try { text = clipboard.readText(); } catch { return; }
     if (text === clipLast) { return; }
     clipLast = text;
-    const url = downloadLinkIn(text);
+    const one = String(text || '').trim();
+    const url = downloadLinkIn(text) || (one.length < 2048 && !/\s/.test(one) && ytdlp.isMediaUrl(one) ? one : '');
     if (!url || !manager || !Notification.isSupported()) { return; }
     if (manager.list().some((t) => t.url === url && t.status !== 'error')) { return; }
     const n = new Notification({ title: T('Vexlo: phát hiện link tải'), body: T('{u}\nBấm để tải bằng Vexlo', { u: url.length > 90 ? url.slice(0, 87) + '...' : url }), silent: true });
@@ -499,6 +512,19 @@ function showMain() {
   mainWin.focus();
 }
 
+/** A picture from the web as a data: address (max 1.5 MB, 15 s); '' when it cannot be had. */
+async function thumbData(url) {
+  const ac = new AbortController();
+  const timer = setTimeout(() => ac.abort(), 15000);
+  try {
+    const res = await net.fetch(url, { signal: ac.signal, headers: { 'user-agent': DEFAULT_UA } });
+    const type = String(res.headers.get('content-type') || '').split(';')[0].trim().toLowerCase();
+    if (!res.ok || !/^image\/(jpeg|png|webp|gif|avif)$/.test(type)) { return ''; }
+    const buf = Buffer.from(await res.arrayBuffer());
+    return buf.length > 0 && buf.length <= 1.5 * 1024 * 1024 ? `data:${type};base64,${buf.toString('base64')}` : '';
+  } catch { return ''; } finally { clearTimeout(timer); }
+}
+
 function openConfirm(id, { replaced = false } = {}) {
   const win = new BrowserWindow(baseOptions({
     width: 440, height: 260, useContentSize: true, resizable: false, minimizable: false, maximizable: false, alwaysOnTop: true,
@@ -526,9 +552,15 @@ function openConfirm(id, { replaced = false } = {}) {
     reveal();
   });
   win.webContents.once('did-finish-load', () => {
-    manager.probeInfo(id).then((info) => {
+    manager.probeInfo(id).then(async (info) => {
       if (!info || win.isDestroyed()) { return; }
-      win.webContents.send('confirm:info', { ...info, suggestedDir: categoryDir(info.filename || info.url, info.kind) });
+      const send = (extra) => { if (!win.isDestroyed()) { win.webContents.send('confirm:info', { ...info, ...extra, suggestedDir: categoryDir(info.filename || info.url, info.kind) }); } };
+      send({});
+      // A video's picture comes from another site: the window may not load it itself (CSP), so it is fetched here and handed over as data.
+      if (info.media && info.media.thumbnail) {
+        const thumb = await thumbData(info.media.thumbnail);
+        if (thumb) { send({ media: { ...info.media, thumbnail: '', thumb } }); }
+      }
     }).catch(() => {});
   });
   win.on('closed', () => {
@@ -870,6 +902,18 @@ function registerIpc() {
     if (r.ok) { return r; }
     if (r.reason === 'password') { return { ok: false, needPassword: true, wrongPassword: !!pw, handled: true }; }
     return { ...r, handled: true };
+  });
+  // yt-dlp: version / install / update (the program comes from github.com/yt-dlp/yt-dlp releases)
+  ipcMain.handle('ytdlp:status', async () => {
+    const v = await ytdlp.ytdlpVersion(toolsDir());
+    return { installed: !!v, version: v };
+  });
+  ipcMain.handle('ytdlp:update', async () => {
+    try {
+      await ytdlp.ensureYtdlp(toolsDir(), { force: true });
+      const v = await ytdlp.ytdlpVersion(toolsDir());
+      return { ok: !!v, version: v };
+    } catch (err) { return { ok: false, error: String((err && err.message) || err) }; }
   });
   ipcMain.handle('stats:get', () => (stats ? stats.summary() : null));
   ipcMain.handle('stats:reset', () => { if (stats) { stats.reset(); } return true; });
@@ -1284,7 +1328,7 @@ function main() {
     fs.mkdirSync(settings.downloadDir, { recursive: true });
     manager = new EngineClient({
       dataDir: app.getPath('userData'), downloadDir: settings.downloadDir, maxConcurrent: settings.maxConcurrent,
-      connections: settings.connections, speedLimit: settings.speedLimitKB * 1024,
+      connections: settings.connections, speedLimit: settings.speedLimitKB * 1024, binDir: toolsDir(), media: mediaConfig(),
     });
     await manager.ready; // the engine process has loaded the saved downloads
     stats = new Stats(path.join(app.getPath('userData'), 'stats.json'));

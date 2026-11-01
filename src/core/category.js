@@ -24,7 +24,7 @@ function extOf(nameOrUrl) {
 
 /** @returns {'video'|'music'|'archive'|'program'|'document'|'other'} */
 function categoryOf(nameOrUrl, kind) {
-  if (kind === 'hls' || kind === 'dash') { return 'video'; }
+  if (kind === 'hls' || kind === 'dash' || kind === 'media') { return 'video'; }
   return BY_EXT.get(extOf(nameOrUrl)) || 'other';
 }
 

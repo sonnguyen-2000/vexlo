@@ -46,7 +46,12 @@
   function renderChips(t) {
     const box = $('chips');
     box.textContent = '';
-    const isStream = t.kind === 'hls' || t.kind === 'dash';
+    const isStream = t.kind === 'hls' || t.kind === 'dash' || t.kind === 'media';
+    if (t.kind === 'media') {
+      if (t.probing) { box.appendChild(chip(T('Đang lấy thông tin video…'), 'busy')); return; }
+      if (t.probeError) { box.appendChild(chip(T('Chưa lấy được thông tin video'), 'warn')); return; }
+      box.appendChild(chip(T('Tải bằng yt-dlp (chọn chất lượng bên dưới)'), 'good', 'i-zap')); return;
+    }
     if (isStream) { box.appendChild(chip(T('Tải song song và ghép thành MP4'), 'good', 'i-zap')); return; }
     if (t.probing) { box.appendChild(chip(T('Đang kiểm tra liên kết…'), 'busy')); return; }
     if (t.probeError) { box.appendChild(chip(T('Chưa kiểm tra được liên kết'), 'warn')); return; }
@@ -54,8 +59,28 @@
     else { box.appendChild(chip(T('Không hỗ trợ tải tiếp, dùng 1 kết nối'), 'warn')); }
   }
 
+  const fmtDur = (sec) => {
+    const n = Math.max(0, Math.round(Number(sec) || 0));
+    const h = Math.floor(n / 3600); const m = Math.floor((n % 3600) / 60); const x = n % 60;
+    return (h ? h + ':' + String(m).padStart(2, '0') : m) + ':' + String(x).padStart(2, '0');
+  };
+  // YouTube / TikTok / Facebook: the picture, the length and the title of the video before it is downloaded.
+  function renderPreview(t) {
+    const box = $('preview');
+    const on = t.kind === 'media';
+    box.classList.toggle('show', on);
+    if (!on) { return; }
+    const m = t.media && t.media.ok !== false ? t.media : null;
+    const thumb = m && m.thumb ? m.thumb : '';
+    if (thumb && $('pvImg').getAttribute('src') !== thumb) { $('pvImg').setAttribute('src', thumb); }
+    box.classList.toggle('has', !!thumb);
+    box.classList.toggle('timed', !!(m && m.duration));
+    $('pvDur').textContent = m && m.duration ? fmtDur(m.duration) : '';
+    $('pvMsg').textContent = t.probeError ? T('Không xem trước được video này.') : (m ? T('Không có ảnh xem trước.') : T('Đang lấy thông tin video…'));
+  }
+
   function render(t) {
-    const isStream = t.kind === 'hls' || t.kind === 'dash';
+    const isStream = t.kind === 'hls' || t.kind === 'dash' || t.kind === 'media';
     $('url').value = t.url || '';
     if (!nameEdited) { $('name').value = String(t.filename || '').replace(/\uFFFD/g, ''); }
     const shownName = $('name').value || t.filename || t.url || '';
@@ -63,9 +88,13 @@
     $('badge').dataset.cat = cat;
     $('badgeUse').setAttribute('href', '#' + SG.GROUPS[cat].icon);
     // One quiet line under the name: what it is, how big, where from. The full address is in the tooltip.
-    const parts = [t.kind === 'hls' ? T('Luồng HLS') : t.kind === 'dash' ? T('Luồng DASH') : SG.GROUPS[cat].label];
+    const parts = [t.kind === 'hls' ? T('Luồng HLS') : t.kind === 'dash' ? T('Luồng DASH') : t.kind === 'media' ? T('Video trực tuyến') : SG.GROUPS[cat].label];
     if (!isStream && t.size > 0) { parts.push(SG.fmtSize(t.size)); }
-    if (SG.hostOf(t.url)) { parts.push(SG.hostOf(t.url)); }
+    if (t.media && t.media.ok !== false) {
+      if (t.media.uploader) { parts.push(t.media.uploader); }
+      if (t.media.maxHeight) { parts.push(t.media.maxHeight + 'p'); }
+    } else if (SG.hostOf(t.url)) { parts.push(SG.hostOf(t.url)); }
+    renderPreview(t);
     $('meta').textContent = parts.join('  ·  ');
     $('meta').title = t.url || '';
     $('dir').value = t.suggestedDir || t.dir || '';
@@ -118,7 +147,7 @@
       if (name) { payload.filename = name; }
       payload.dir = $('dir').value;
       payload.connections = Number($('conn').value) || 8;
-      if (task.kind === 'hls' || task.kind === 'dash') { payload.quality = $('quality').value; }
+      if (task.kind === 'hls' || task.kind === 'dash' || task.kind === 'media') { payload.quality = $('quality').value; }
     }
     let ok = false;
     try { ok = await api.confirmResolve(payload); } catch { ok = false; }

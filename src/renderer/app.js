@@ -206,7 +206,7 @@
     const nm = t.filename || decodeName(t.url);
     if (name.textContent !== nm) { name.textContent = nm; name.title = t.url; }
     const site = hostOf((t.meta && t.meta.page) || t.url);
-    tr.querySelector('.fname small').textContent = site + (t.kind !== 'file' ? '  ·  ' + (t.kind === 'hls' ? 'HLS' : 'DASH') : '') + (t.limitKB ? '  ·  ' + T('Giới hạn {v}/s', { v: fmtSize(t.limitKB * 1024) }) : '');
+    tr.querySelector('.fname small').textContent = site + (t.kind !== 'file' ? '  ·  ' + (t.kind === 'hls' ? 'HLS' : t.kind === 'media' ? 'yt-dlp' : 'DASH') : '') + (t.limitKB ? '  ·  ' + T('Giới hạn {v}/s', { v: fmtSize(t.limitKB * 1024) }) : '');
     const p = percent(t);
     tr.querySelector('.prog i').style.width = p.toFixed(1) + '%';
     tr.querySelector('.prog em').textContent = t.size || t.segTotal || t.status === 'done' ? Math.floor(p) + '%' : '';
@@ -643,6 +643,8 @@
     $('sConfirm').checked = !!settings.confirm;
     $('sLang').value = settings.language || 'auto';
     $('sTheme').value = settings.theme || 'system';
+    $('sCookies').value = settings.mediaCookies || 'none';
+    refreshYt();
     $('sProg').checked = settings.progressWindow !== false;
     $('sFloat').checked = settings.progressFloat !== false;
     $('sOnErr').value = settings.progressOnError || 'ask';
@@ -723,6 +725,22 @@
     $('nWeb').onclick = () => bridge.releaseNotes();
     openModal('mNew');
   }
+  // ---- yt-dlp (YouTube / TikTok / Facebook)
+  async function refreshYt() {
+    try {
+      const r = await bridge.ytdlpStatus();
+      $('ytMsg').textContent = r && r.installed ? T('Đã cài, phiên bản {v}', { v: r.version }) : T('Chưa cài (tự tải ở lần đầu cần dùng)');
+      $('bYt').textContent = r && r.installed ? T('Cập nhật yt-dlp') : T('Tải yt-dlp ngay');
+    } catch { /* settings not ready */ }
+  }
+  $('bYt').addEventListener('click', async () => {
+    $('bYt').disabled = true;
+    $('ytMsg').textContent = T('Đang tải yt-dlp từ GitHub…');
+    const r = await bridge.ytdlpUpdate();
+    $('bYt').disabled = false;
+    if (r && r.ok) { $('ytMsg').textContent = T('Đã cập nhật, phiên bản {v}', { v: r.version }); $('bYt').textContent = T('Cập nhật yt-dlp'); }
+    else { $('ytMsg').textContent = T('Không tải được: {e}', { e: (r && r.error) || '' }); }
+  });
   // ---- download statistics
   const STAT_TYPE = { video: 'Video', music: 'Âm thanh', archive: 'Nén', program: 'Chương trình', document: 'Tài liệu', other: 'Khác' };
   async function openStats() {
@@ -883,7 +901,7 @@
   });
   $('sSave').addEventListener('click', async () => {
     settings = await bridge.setSettings({
-      downloadDir: $('sDir').value.trim(), categorize: $('sCat').checked, confirm: $('sConfirm').checked, notify: $('sNotify').checked, language: $('sLang').value, theme: $('sTheme').value, progressWindow: $('sProg').checked, progressFloat: $('sFloat').checked, progressOnError: $('sOnErr').value, autoUpdate: $('sUpd').checked, clipboardWatch: $('sClip').checked, autoExtract: $('sExtract').checked, extractToolDir: $('sTool').value.trim(),
+      downloadDir: $('sDir').value.trim(), categorize: $('sCat').checked, confirm: $('sConfirm').checked, notify: $('sNotify').checked, language: $('sLang').value, theme: $('sTheme').value, mediaCookies: $('sCookies').value, progressWindow: $('sProg').checked, progressFloat: $('sFloat').checked, progressOnError: $('sOnErr').value, autoUpdate: $('sUpd').checked, clipboardWatch: $('sClip').checked, autoExtract: $('sExtract').checked, extractToolDir: $('sTool').value.trim(),
       scheduleEnabled: $('sSchOn').checked, scheduleStart: $('sSchStart').value, scheduleStop: $('sSchStop').value,
       scheduleDays: [0, 1, 2, 3, 4, 5, 6].filter((d) => $('sDay' + d).checked), deleteMode: $('sDelete').value,
       closeToTray: $('sTray').checked, startWithOS: $('sStart').checked, startHidden: $('sHidden').checked, connections: Number($('sConn').value),

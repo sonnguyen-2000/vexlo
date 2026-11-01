@@ -19,7 +19,7 @@
   for (const [id, g] of Object.entries(GROUPS)) { for (const e of g.ext.split(' ').filter(Boolean)) { BY_EXT[e] = id; } }
 
   function categoryOf(name, kind) {
-    if (kind === 'hls' || kind === 'dash') { return 'video'; }
+    if (kind === 'hls' || kind === 'dash' || kind === 'media') { return 'video'; }
     const m = /\.([a-z0-9]{1,8})$/i.exec(String(name || ''));
     return (m && BY_EXT[m[1].toLowerCase()]) || 'other';
   }

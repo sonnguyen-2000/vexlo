@@ -32,6 +32,7 @@ listen(async (msg) => {
       if (typeof msg.downloadDir === 'string') { manager.downloadDir = msg.downloadDir; }
       if (Number.isFinite(msg.connections)) { manager.connections = msg.connections; }
       if (typeof msg.proxy === 'string') { require('./http').setProxy(msg.proxy); }
+      if (msg.media && typeof msg.media === 'object') { manager.media = msg.media; }
       return;
     }
     if (msg.t === 'call') {

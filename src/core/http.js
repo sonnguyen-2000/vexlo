@@ -12,11 +12,21 @@ const agents = {
 
 // ---- optional proxy: HTTP (plain HTTP via absolute URI, HTTPS via CONNECT tunnel) or SOCKS5 (socks5://host:port, names resolved by the proxy).
 let proxy = null; // { host, port, auth }
+let proxyText = ''; // the proxy as a full URL (for programs that take --proxy)
 let bypassLocal = true;
 const proxyAgents = new Map();
 
 /** Accepts 'host:port', 'http://host:port' or 'http://user:pass@host:port'. Returns true when it is usable; '' turns the proxy off. */
 function setProxy(str, { bypassLocal: bl = true } = {}) {
+  const ok = setProxyInner(str, { bypassLocal: bl });
+  const t = String(str || '').trim();
+  proxyText = ok && proxy && t ? (/^[a-z][a-z0-9+.-]*:\/\//i.test(t) ? t : 'http://' + t) : '';
+  return ok;
+}
+/** The proxy now in use as a URL ('' when none). */
+function getProxy() { return proxyText; }
+
+function setProxyInner(str, { bypassLocal: bl = true } = {}) {
   proxyAgents.clear();
   bypassLocal = bl;
   const t = String(str || '').trim();
@@ -279,4 +289,4 @@ async function fetchBuffer(url, opts = {}) {
   return { body: Buffer.concat(chunks), url: finalUrl, headers: res.headers };
 }
 
-module.exports = { setProxy, request, fetchBuffer, HttpError, classifyStatus, lowerKeys, DEFAULT_UA };
+module.exports = { setProxy, getProxy, request, fetchBuffer, HttpError, classifyStatus, lowerKeys, DEFAULT_UA };

@@ -17,7 +17,7 @@
     $('badgeUse').setAttribute('href', '#' + SG.GROUPS[cat].icon);
     $('name').textContent = t.filename || t.url || '';
     $('name').title = t.filename || '';
-    const meta = [t.kind === 'hls' ? T('Luồng HLS') : t.kind === 'dash' ? T('Luồng DASH') : SG.GROUPS[cat].label, SG.hostOf(t.url)].filter(Boolean);
+    const meta = [t.kind === 'hls' ? T('Luồng HLS') : t.kind === 'dash' ? T('Luồng DASH') : t.kind === 'media' ? T('Video trực tuyến') : SG.GROUPS[cat].label, SG.hostOf(t.url)].filter(Boolean);
     $('meta').textContent = meta.join('  ·  ');
     $('meta').title = t.url || '';
     const p = SG.percent(t);

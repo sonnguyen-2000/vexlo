@@ -5,11 +5,13 @@ const crypto = require('crypto');
 const { EventEmitter } = require('events');
 const { Download, probe } = require('./download');
 const { SegmentedDownload } = require('./segmented');
+const { MediaDownload, isMediaUrl, fetchInfo } = require('./ytdlp');
 const { SpeedLimiter, TaskLimiter } = require('./limiter');
 const { uniquePath, atomicWriteJson, pickFilename, sanitizeFilename } = require('./util');
 
 function detectKind(url, hint) {
-  if (hint === 'hls' || hint === 'dash' || hint === 'file') { return hint; }
+  if (hint === 'hls' || hint === 'dash' || hint === 'file' || hint === 'media') { return hint; }
+  if (isMediaUrl(url)) { return 'media'; } // a video page of YouTube / TikTok / Facebook / Instagram: yt-dlp downloads it
   let p = '';
   try { p = new URL(url).pathname.toLowerCase(); } catch { /* ignore */ }
   if (/\.m3u8?$/.test(p)) { return 'hls'; }
@@ -23,7 +25,7 @@ function detectKind(url, hint) {
  */
 class DownloadManager extends EventEmitter {
   constructor({
-    dataDir, downloadDir, maxConcurrent = 3, connections = 8, speedLimit = 0, ffmpegPath, autoResume = false,
+    dataDir, downloadDir, maxConcurrent = 3, connections = 8, speedLimit = 0, ffmpegPath, autoResume = false, binDir = '', media = {},
   }) {
     super();
     this.dataDir = dataDir;
@@ -32,6 +34,8 @@ class DownloadManager extends EventEmitter {
     this.connections = connections;
     this.ffmpegPath = ffmpegPath;
     this.autoResume = autoResume;
+    this.binDir = binDir || path.join(dataDir, 'tools');
+    this.media = media || {}; // { cookies: 'firefox'|'', jsRuntime: path } for yt-dlp, changed live by the app
     this.limiter = new SpeedLimiter(speedLimit);
     this.tasks = new Map(); // id -> { dl, state }
     this.file = path.join(dataDir, 'downloads.json');
@@ -84,6 +88,16 @@ class DownloadManager extends EventEmitter {
     const resolvePath = (dir, name) => uniquePath(dir, name, this._reservedPaths(state.id));
     const limiter = new TaskLimiter(this.limiter, () => state.limitKB || 0);
     const deps = { limiter, ffmpegPath: this.ffmpegPath, resolvePath };
+    if (state.kind === 'media') {
+      // yt-dlp does its own transfers: it gets the speed caps as an option instead of going through the limiter.
+      const getLimitKB = () => {
+        const own = Number(state.limitKB) || 0;
+        const all = Math.round((this.limiter.limit || 0) / 1024);
+        return own && all ? Math.min(own, all) : (own || all);
+      };
+      const isNameTaken = (id, dir, base) => [...this.tasks.values()].some(({ state: o }) => o.id !== id && o.kind === 'media' && o.dir === dir && o.base && o.base.toLowerCase() === base.toLowerCase());
+      return new MediaDownload(state, { ...deps, binDir: this.binDir, getMedia: () => this.media, getLimitKB, isNameTaken });
+    }
     return state.kind === 'hls' || state.kind === 'dash' ? new SegmentedDownload(state, deps) : new Download(state, deps);
   }
 
@@ -128,7 +142,7 @@ class DownloadManager extends EventEmitter {
       // Names come from web pages and browser extensions: never let one carry a path ("..\\x", "C:\\...") into the folder logic.
       filename: opts.filename ? sanitizeFilename(opts.filename) : '', connections: opts.connections || this.connections, meta: opts.meta || {},
     };
-    const state = kind === 'file' ? Download.create(base) : SegmentedDownload.create({ ...base, kind, quality: opts.quality });
+    const state = kind === 'file' ? Download.create(base) : kind === 'media' ? MediaDownload.create({ ...base, quality: opts.quality }) : SegmentedDownload.create({ ...base, kind, quality: opts.quality });
     state.kind = kind;
     if (opts.autoBase && kind === 'file') { state.autoBase = String(opts.autoBase); }
     if (opts.pending) { state.pending = true; }
@@ -217,6 +231,14 @@ class DownloadManager extends EventEmitter {
     const t = this.tasks.get(id);
     if (!t) { return null; }
     const st = t.state;
+    if (st.kind === 'media') {
+      // YouTube / TikTok / Facebook: ask yt-dlp for the title, picture and length so the window can show what is about to be downloaded.
+      const r = await fetchInfo(this.binDir, st.url, { media: this.media, ffmpegPath: this.ffmpegPath });
+      if (!r.ok) { return { ...this.snapshot(t), probeError: r.error, media: { ok: false } }; }
+      if (!st.userNamed && r.title) { st.filename = sanitizeFilename(r.title, 'video').slice(0, 120) + (st.quality === 'audio' ? '.mp3' : '.mp4'); }
+      this.emit('update', this.snapshot(t));
+      return { ...this.snapshot(t), media: r };
+    }
     if (st.kind !== 'file') { return { ...this.snapshot(t), filenameGuess: st.filename || '' }; }
     try {
       const info = await probe(st.url, st.headers);

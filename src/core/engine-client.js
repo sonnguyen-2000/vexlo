@@ -39,6 +39,7 @@ class EngineClient extends EventEmitter {
     this._dir = opts.downloadDir;
     this._conns = opts.connections;
     this._proxy = opts.proxy || '';
+    this._media = opts.media || {};
     this.cache = new Map();
     this._rid = 0;
     this._pending = new Map();
@@ -61,7 +62,7 @@ class EngineClient extends EventEmitter {
       this.restarts++;
       setTimeout(() => { if (!this._closing) { this._start(); } }, 500);
     });
-    me.post({ t: 'init', opts: { ...this.opts, downloadDir: this._dir, connections: this._conns, proxy: this._proxy } });
+    me.post({ t: 'init', opts: { ...this.opts, downloadDir: this._dir, connections: this._conns, proxy: this._proxy, media: this._media } });
   }
 
   _onMessage(msg) {
@@ -103,6 +104,8 @@ class EngineClient extends EventEmitter {
   set downloadDir(v) { this._dir = v; this._w.post({ t: 'config', downloadDir: v }); }
   get proxy() { return this._proxy; }
   set proxy(v) { this._proxy = String(v || ''); this._w.post({ t: 'config', proxy: this._proxy }); }
+  get media() { return this._media; }
+  set media(v) { this._media = { ...(v || {}) }; this._w.post({ t: 'config', media: this._media }); }
   get connections() { return this._conns; }
   set connections(v) { this._conns = v; this._w.post({ t: 'config', connections: v }); }
   setSpeedLimit(bps) { this.opts.speedLimit = bps; this._call('setSpeedLimit', bps).catch(() => {}); }

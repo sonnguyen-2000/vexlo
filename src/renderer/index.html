@@ -97,8 +97,9 @@
       <div class="field"><label for="aDir">Lưu vào</label><div class="row"><input id="aDir" type="text" placeholder="Tự phân loại theo loại tệp"><button class="btn sm" id="aBrowse">Chọn…</button></div></div>
       <div class="grid2">
         <div class="field"><label for="aConn">Số kết nối</label><input id="aConn" type="number" min="1" max="32"></div>
-        <div class="field"><label for="aQual">Chất lượng (video luồng)</label><select id="aQual"><option value="best">Cao nhất</option><option value="1080">Tối đa 1080p</option><option value="720">Tối đa 720p</option><option value="480">Tối đa 480p</option><option value="worst">Thấp nhất</option></select></div>
+        <div class="field"><label for="aQual">Chất lượng (video luồng)</label><select id="aQual"><option value="best">Cao nhất</option><option value="1080">Tối đa 1080p</option><option value="720">Tối đa 720p</option><option value="480">Tối đa 480p</option><option value="worst">Thấp nhất</option><option value="audio">Chỉ âm thanh (MP3)</option></select></div>
       </div>
+      <div class="hint">Dán link video YouTube, TikTok, Facebook hoặc Instagram là tải được, Vexlo dùng yt-dlp cho các trang này.</div>
     </div>
     <footer><button class="btn" data-close>Hủy</button><button class="btn" id="aLater">Tải sau</button><button class="btn pri" id="aStart"><svg class="ic"><use href="#i-download"/></svg>Bắt đầu tải</button></footer>
   </div>
@@ -256,6 +257,12 @@
           <div class="row"><button class="btn sm" id="bExpList" type="button">Xuất danh sách tải</button><button class="btn sm" id="bImpList" type="button">Nhập danh sách tải</button></div>
           <div class="hint">Lưu danh sách tải hiện tại ra một tệp, hoặc nạp lại từ tệp đó (hay từ tệp văn bản mỗi dòng một link). Tiện khi cài lại máy.</div>
           <div class="hint" id="listMsg"></div></div>
+        <div class="field"><label>Video từ YouTube, TikTok, Facebook</label>
+          <div class="row"><button class="btn sm" id="bYt" type="button">Cập nhật yt-dlp</button><span class="hint" id="ytMsg"></span></div>
+          <div class="hint">Vexlo tải yt-dlp (chương trình mã nguồn mở) về máy ở lần đầu bạn tải video từ các trang này. Khi YouTube đổi cách chặn, bấm nút trên để lấy bản mới.</div></div>
+        <div class="field"><label for="sCookies">Đăng nhập bằng trình duyệt (cho video riêng tư, giới hạn tuổi, "xác minh không phải robot")</label>
+          <select id="sCookies"><option value="none">Không dùng</option><option value="firefox">Firefox (khuyên dùng)</option><option value="chrome">Chrome</option><option value="edge">Edge</option><option value="brave">Brave</option></select>
+          <div class="hint">Vexlo đọc cookie của trình duyệt bạn chọn để yt-dlp tải như chính bạn. Hãy đăng nhập trang đó trong trình duyệt trước. Cookie chỉ dùng trên máy này.</div></div>
         <div class="field"><label>Thống kê</label>
           <div class="row"><button class="btn sm" id="bStats" type="button">Xem thống kê tải</button></div>
           <div class="hint">Dung lượng đã tải theo ngày, theo trang web và theo loại tệp. Chỉ lưu trên máy này.</div></div>
