@@ -3,7 +3,7 @@ const path = require('path');
 const fs = require('fs');
 const crypto = require('crypto');
 const {
-  app, BrowserWindow, Tray, Menu, ipcMain, dialog, shell, clipboard, Notification, nativeImage, nativeTheme, screen, net, session,
+  app, BrowserWindow, Tray, Menu, ipcMain, dialog, shell, clipboard, Notification, nativeImage, nativeTheme, screen, net, session, powerMonitor,
 } = require('electron');
 const { detectKind } = require('../core/manager');
 const { EngineClient } = require('../core/engine-client');
@@ -973,6 +973,13 @@ function maybeAutoRetry(s) {
   };
   arm(RETRY_DELAYS[st.n]);
 }
+// After sleep / hibernate the connections are dead: failed downloads get a fresh start at once instead of waiting out their delay.
+function retryAfterWake() {
+  if (!manager) { return; }
+  for (const t of manager.list()) {
+    if (t.status === 'error' && TRANSIENT.test(String(t.error || ''))) { forgetRetry(t.id); setTimeout(() => { const c = manager && manager.get(t.id); if (c && c.state.status === 'error') { manager.resume(t.id); } }, 5000); }
+  }
+}
 function forgetRetry(id) { const st = retryState.get(id); if (st && st.timer) { clearTimeout(st.timer); } retryState.delete(id); }
 
 const netLog = []; // recent connection problems / stalls reported by the engine, shown in the exported log
@@ -1192,6 +1199,7 @@ function main() {
     createMainWindow({ hidden: process.argv.includes('--hidden') && !!tray });
     app.on('activate', showMain);
     setInterval(runSchedule, 20000);
+    try { powerMonitor.on('resume', retryAfterWake); } catch { /* not available */ }
     startAutoUpdate();
   });
 

@@ -128,3 +128,28 @@ test('a file whose type is only known after the server answers goes to the match
     assert.ok(fs.existsSync(path.join(base, 'Compressed', 'pack.rar')));
   } finally { await close(web); fs.rmSync(base, { recursive: true, force: true }); }
 });
+
+test('looksLikeWebPage: an HTML answer saved under a binary name is caught, real files and html names are not', () => {
+  const { looksLikeWebPage } = require('../src/core/util');
+  const html = Buffer.from('<!DOCTYPE html><html><body>Link expired</body></html>');
+  assert.equal(looksLikeWebPage({ filename: 'a.zip', size: 60, head: html }), true);
+  assert.equal(looksLikeWebPage({ filename: 'a.rar', size: 60, head: Buffer.from('\n  <html lang="vi">') }), true);
+  assert.equal(looksLikeWebPage({ filename: 'page.html', size: 60, head: html }), false);
+  assert.equal(looksLikeWebPage({ filename: 'a.zip', size: 60, head: Buffer.from('PK\x03\x04rest') }), false);
+  assert.equal(looksLikeWebPage({ filename: 'a.zip', size: 50 * 1024 * 1024, head: html }), false);
+});
+
+test('a download that answers with a web page fails clearly and leaves no file', async () => {
+  const web = http.createServer((req, res) => { res.writeHead(200, { 'content-type': 'text/html' }); res.end('<html><body>Hết hạn</body></html>'); });
+  const wp = await listen(web);
+  const base = fs.mkdtempSync(path.join(os.tmpdir(), 'vx-'));
+  try {
+    const state = Download.create({ id: 'b'.repeat(8) + '-bbbb-bbbb-bbbb-' + 'b'.repeat(12), url: `http://127.0.0.1:${wp}/f.zip`, dir: base, filename: 'f.zip' });
+    const dl = new Download(state, {});
+    dl.on('error', () => {});
+    await dl.start();
+    assert.equal(state.status, 'error');
+    assert.match(state.error, /trang web/);
+    assert.deepEqual(fs.readdirSync(base), []);
+  } finally { await close(web); fs.rmSync(base, { recursive: true, force: true }); }
+});

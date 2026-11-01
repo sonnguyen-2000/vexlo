@@ -74,6 +74,19 @@ function extFromMime(mime) {
   return MIME_EXT[String(mime).split(';')[0].trim().toLowerCase()] || '';
 }
 
+const WEB_EXT = new Set(['html', 'htm', 'xhtml', 'php', 'asp', 'aspx', 'jsp', 'shtml', 'txt', 'xml', 'json', 'csv', 'js', 'css', 'svg', 'md']);
+/**
+ * True when a download that should be a binary file is really a web page (expired link, login wall, error page saved as .zip).
+ * `head` is the first bytes of the file; only small files are suspected.
+ */
+function looksLikeWebPage({ mime, filename, size, head }) {
+  const ext = (/\.([a-z0-9]+)$/i.exec(filename || '') || [])[1] || '';
+  if (WEB_EXT.has(ext.toLowerCase())) { return false; }
+  if (size > 5 * 1024 * 1024) { return false; }
+  const text = Buffer.isBuffer(head) ? head.toString('utf8', 0, 600) : String(head || '').slice(0, 600);
+  return /^\s*(<!doctype\s+html|<html[\s>]|<head[\s>]|<body[\s>])/i.test(text.replace(/^\uFEFF/, ''));
+}
+
 /** Choose a final file name from headers/url/mime. */
 function pickFilename({ contentDisposition, url, mime, hint }) {
   let name = hint || filenameFromContentDisposition(contentDisposition) || filenameFromUrl(url) || 'download';
@@ -248,6 +261,7 @@ function explainExtractFailure(attempts) {
 }
 
 module.exports = {
+  looksLikeWebPage,
   listCommand, parseListedTotal, explainExtractFailure, extractCommands, isArchive, extractDirFor, parseImportList, plainNotes, downloadLinkIn, sanitizeFilename, filenameFromContentDisposition, filenameFromUrl, extFromMime,
   pickFilename, uniquePath, sleep, atomicWriteJson,
 };

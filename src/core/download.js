@@ -5,7 +5,7 @@ const path = require('path');
 const { EventEmitter } = require('events');
 const { request, classifyStatus, HttpError } = require('./http');
 const { SpeedMeter, SpeedLimiter } = require('./limiter');
-const { pickFilename, sleep, uniquePath } = require('./util');
+const { pickFilename, sleep, uniquePath, looksLikeWebPage } = require('./util');
 const { folderFor } = require('./category');
 
 const MIN_SPLIT = 512 * 1024;      // never split a segment smaller than this
@@ -385,6 +385,16 @@ class Download extends EventEmitter {
     if (s.size && s.downloaded < s.size) { throw new HttpError('Tệp tải về chưa đủ dung lượng'); }
     try { await this.fd.sync(); } catch { /* not fatal */ }
     await this._closeFd();
+    // A link that expired or needs a login often answers with a web page; saving it as ".zip" only looks like success.
+    if (s.size > 0 && s.size <= 5 * 1024 * 1024 || !s.size) {
+      let head = Buffer.alloc(0);
+      try { const h = await fsp.open(this.partPath, 'r'); const b = Buffer.alloc(600); const { bytesRead } = await h.read(b, 0, 600, 0); await h.close(); head = b.subarray(0, bytesRead); } catch { /* unreadable: skip the check */ }
+      if (looksLikeWebPage({ mime: s.mime, filename: s.filename, size: s.downloaded, head })) {
+        try { await fsp.unlink(this.partPath); } catch { /* ignore */ }
+        s.segments = []; s.downloaded = 0; s.path = '';
+        throw new HttpError('Máy chủ trả về một trang web thay vì file (link có thể đã hết hạn hoặc cần đăng nhập)', { fatal: true });
+      }
+    }
     // Never overwrite a file that appeared meanwhile.
     let target = s.path;
     if (fs.existsSync(target)) {
