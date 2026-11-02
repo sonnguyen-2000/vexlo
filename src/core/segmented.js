@@ -271,25 +271,30 @@ class SegmentedDownload extends EventEmitter {
         if (job.range) { headers.range = `bytes=${job.range.start}-${job.range.end}`; }
         const { res } = await request(job.url, { headers, signal: this.ac.signal, timeout: 20000, idleTimeout: SEG_IDLE_MS });
         if (res.statusCode !== 200 && res.statusCode !== 206) { res.destroy(); throw classifyStatus(res.statusCode, res); }
-        const chunks = [];
-        for await (const c of res) {
-          if (this._stopReason) { res.destroy(); return; }
-          await this.limiter.wait(c.length);
-          chunks.push(c);
-          received += c.length;
-          this._runBytes += c.length;
-          this.meter.add(c.length);
-          this._updateSizes();
-          this._emitProgress();
-        }
-        let data = Buffer.concat(chunks);
+        // Stream straight to disk: a segment can be tens of MB, and holding 16 of them (plus the copy made by concat) in memory
+        // starves the whole PC and freezes the engine for many seconds, which shows up as every connection timing out at once.
+        const f = this._segPath(job);
+        let dec = null;
         if (job.key && job.key.key) {
           const iv = job.key.iv || (() => { const b = Buffer.alloc(16); b.writeUInt32BE(job.key.seq >>> 0, 12); return b; })();
-          const d = crypto.createDecipheriv('aes-128-cbc', job.key.key, iv);
-          data = Buffer.concat([d.update(data), d.final()]);
+          dec = crypto.createDecipheriv('aes-128-cbc', job.key.key, iv);
         }
-        const f = this._segPath(job);
-        await fsp.writeFile(f + '.tmp', data);
+        const fh = await fsp.open(f + '.tmp', 'w');
+        try {
+          for await (const c of res) {
+            if (this._stopReason) { res.destroy(); return; }
+            await this.limiter.wait(c.length);
+            received += c.length;
+            this._runBytes += c.length;
+            this.meter.add(c.length);
+            this._updateSizes();
+            this._emitProgress();
+            await fh.writeFile(dec ? dec.update(c) : c);
+          }
+          if (dec) { await fh.writeFile(dec.final()); }
+        } finally {
+          await fh.close().catch(() => {});
+        }
         await renameRetry(f + '.tmp', f); // antivirus / indexers may hold the new file for a moment on Windows
         this._doneSegs++;
         s.segDone = this._doneSegs;
