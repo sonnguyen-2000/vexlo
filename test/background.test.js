@@ -578,6 +578,9 @@ test('sendPage refuses pages that are not a supported video page', async () => {
     assert.equal((await bg.send({ type: 'sendPage', url }, { tab: { id: 5, url } })).ok, false, url);
   }
   assert.equal(manager.added.length, 0);
+  // Any ordinary web page is accepted only when the content script asks for the yt-dlp fallback.
+  assert.equal((await bg.send({ type: 'sendPage', any: true, url: 'https://example.com/watch/1', title: 'x' }, { tab: { id: 5 } })).ok, true);
+  assert.equal(manager.added[0].kind, 'media');
   await api.close();
 });
 

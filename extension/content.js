@@ -91,7 +91,8 @@
     if (!list.length) {
       const src = current && (current.currentSrc || current.src);
       if (src && /^https?:/i.test(src)) { return doSend({ type: 'sendUrl', url: src }); }
-      return showToast(L.none, true);
+      // Nothing captured (e.g. a blob/MSE player): let yt-dlp try the page itself.
+      return doSend({ type: 'sendPage', any: true, url: location.href, title: document.title });
     }
     return openPanel(list);
   }
@@ -184,7 +185,8 @@
   const hasDirectSrc = (v) => /^https?:/i.test(v.currentSrc || v.src || '');
   // On a YouTube / TikTok / Facebook / Instagram video page the app fetches the video itself (yt-dlp): the page address is all it needs.
   const onVideoPage = () => typeof SGMediaSite !== 'undefined' && SGMediaSite.isVideoPage(location.href);
-  const canDownload = (v) => onVideoPage() || mediaCount > 0 || hasDirectSrc(v);
+  // Any big video can offer the button: when nothing was captured, the page address is handed to yt-dlp, which knows many other sites.
+  const canDownload = () => true;
 
   function videoAt(x, y) {
     for (const el of document.elementsFromPoint(x, y)) {

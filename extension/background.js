@@ -461,7 +461,7 @@ browser.runtime.onMessage.addListener((msg, sender) => {
       // A video page of YouTube / TikTok / Facebook / Instagram: the app downloads it with yt-dlp, so only the address is handed over.
       return (async () => {
         const url = String(msg.url || '');
-        if (!SGMediaSite.isVideoPage(url)) { return { ok: false, error: 'not-video' }; }
+        if (!SGMediaSite.isVideoPage(url) && !(msg.any && /^https?:\/\//i.test(url))) { return { ok: false, error: 'not-video' }; }
         const st = await appStatus(true);
         if (!st.ok) { return { ok: false, error: 'app-down', code: 'app-down' }; }
         let title = String(msg.title || '');
