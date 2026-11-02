@@ -64,7 +64,7 @@ async function loadBackground({ port, settings = {}, tabs = {}, cookies = [], na
   };
   sandbox.self = sandbox;
   vm.createContext(sandbox);
-  for (const f of ['lib/i18n.js', 'lib/classify.js', 'lib/hlsinfo.js', 'background.js']) { vm.runInContext(read(f), sandbox, { filename: f }); }
+  for (const f of ['lib/i18n.js', 'lib/classify.js', 'lib/hlsinfo.js', 'lib/mediasite.js', 'background.js']) { vm.runInContext(read(f), sandbox, { filename: f }); }
   const send = (msg, sender = {}) => L.message(msg, sender);
   await sleep(25); // let loadSettings()/buildMenus() finish
   return { L, calls, send };
@@ -554,4 +554,45 @@ test('refresh link: several captures of the same page (two files) send only one 
   await sleep(400);
   assert.equal(manager.added.length, 1);
   await api.close();
+});
+
+// ---------------------------------------------------------------- download button on video pages (YouTube, TikTok, Facebook, Instagram)
+
+test('sendPage hands a video page address to the app as a media download', async () => {
+  const { api, manager } = await startApp();
+  const bg = await loadBackground({ port: api.port, tabs: TAB });
+  const url = 'https://www.youtube.com/watch?v=abc123';
+  assert.equal((await bg.send({ type: 'sendPage', url, title: 'Clip' }, { tab: { id: 5, url } })).ok, true);
+  assert.equal(manager.added.length, 1);
+  assert.equal(manager.added[0].url, url);
+  assert.equal(manager.added[0].kind, 'media');
+  assert.equal(manager.added[0].meta.title, 'Clip');
+  assert.equal(manager.added[0].meta.page, url);
+  await api.close();
+});
+
+test('sendPage refuses pages that are not a supported video page', async () => {
+  const { api, manager } = await startApp();
+  const bg = await loadBackground({ port: api.port, tabs: TAB });
+  for (const url of ['https://www.youtube.com/', 'https://example.com/watch?v=1', 'file:///c:/x.mp4', 'javascript:alert(1)']) {
+    assert.equal((await bg.send({ type: 'sendPage', url }, { tab: { id: 5, url } })).ok, false, url);
+  }
+  assert.equal(manager.added.length, 0);
+  await api.close();
+});
+
+test('extension and app agree on which pages are videos', () => {
+  const vm2 = require('vm');
+  const ctx = { URL }; ctx.self = ctx; vm2.createContext(ctx);
+  vm2.runInContext(read('lib/mediasite.js'), ctx);
+  const { isMediaUrl } = require('../src/core/ytdlp');
+  const urls = [
+    'https://www.youtube.com/watch?v=abc', 'https://m.youtube.com/watch?v=abc', 'https://www.youtube.com/shorts/abc', 'https://youtu.be/abc', 'https://www.youtube.com/live/abc',
+    'https://www.youtube.com/', 'https://www.youtube.com/feed/subscriptions', 'https://www.youtube.com/@name',
+    'https://www.tiktok.com/@u/video/123', 'https://vm.tiktok.com/ZM1/', 'https://www.tiktok.com/@u',
+    'https://www.facebook.com/watch/?v=1', 'https://www.facebook.com/reel/123', 'https://www.facebook.com/u/videos/123', 'https://fb.watch/abc', 'https://www.facebook.com/',
+    'https://www.instagram.com/reel/abc/', 'https://www.instagram.com/p/abc/', 'https://www.instagram.com/someone/',
+    'https://example.com/video.mp4', 'not a url',
+  ];
+  for (const u of urls) { assert.equal(ctx.SGMediaSite.isVideoPage(u), !!isMediaUrl(u), u); }
 });

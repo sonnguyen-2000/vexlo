@@ -457,6 +457,19 @@ browser.runtime.onMessage.addListener((msg, sender) => {
         return { ok: true };
       })().catch((e) => ({ ok: false, error: e.message, code: e.code || '' }));
     }
+    case 'sendPage': {
+      // A video page of YouTube / TikTok / Facebook / Instagram: the app downloads it with yt-dlp, so only the address is handed over.
+      return (async () => {
+        const url = String(msg.url || '');
+        if (!SGMediaSite.isVideoPage(url)) { return { ok: false, error: 'not-video' }; }
+        const st = await appStatus(true);
+        if (!st.ok) { return { ok: false, error: 'app-down', code: 'app-down' }; }
+        let title = String(msg.title || '');
+        if (!title) { try { title = (await browser.tabs.get(tabId)).title || ''; } catch { /* no tab */ } }
+        await sendToApp([{ url, kind: 'media', page: url, title }]);
+        return { ok: true };
+      })().catch((e) => ({ ok: false, error: e.message, code: e.code || '' }));
+    }
     case 'clear': tabMedia.delete(tabId); updateBadge(tabId); return Promise.resolve({ ok: true });
     default: return undefined;
   }

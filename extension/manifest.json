@@ -24,6 +24,7 @@
       "lib/i18n.js",
       "lib/classify.js",
       "lib/hlsinfo.js",
+      "lib/mediasite.js",
       "background.js"
     ],
     "persistent": true
@@ -44,6 +45,7 @@
         "https://*/*"
       ],
       "js": [
+        "lib/mediasite.js",
         "content.js"
       ],
       "all_frames": true,

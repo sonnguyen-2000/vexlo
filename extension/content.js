@@ -82,6 +82,7 @@
 
   async function onButton() {
     if (panelOpen) { closePanel(); return; }
+    if (onVideoPage()) { return doSend({ type: 'sendPage', url: location.href, title: document.title }); }
     let list = [];
     try { list = await api.runtime.sendMessage({ type: 'getMedia' }); } catch { list = []; }
     list = list || [];
@@ -181,7 +182,9 @@
       .finally(() => { countBusy = false; countAt = Date.now(); if (done) { done(); } });
   }
   const hasDirectSrc = (v) => /^https?:/i.test(v.currentSrc || v.src || '');
-  const canDownload = (v) => mediaCount > 0 || hasDirectSrc(v);
+  // On a YouTube / TikTok / Facebook / Instagram video page the app fetches the video itself (yt-dlp): the page address is all it needs.
+  const onVideoPage = () => typeof SGMediaSite !== 'undefined' && SGMediaSite.isVideoPage(location.href);
+  const canDownload = (v) => onVideoPage() || mediaCount > 0 || hasDirectSrc(v);
 
   function videoAt(x, y) {
     for (const el of document.elementsFromPoint(x, y)) {

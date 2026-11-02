@@ -19,7 +19,38 @@
     const st = await refreshStatus();
     const items = await browser.runtime.sendMessage({ type: 'getMedia', tabId }).catch(() => []);
     list.textContent = '';
+    // On a video page of YouTube / TikTok / Facebook / Instagram the whole page is the download.
+    const pageUrl = tab && tab.url;
+    if (typeof SGMediaSite !== 'undefined' && SGMediaSite.isVideoPage(pageUrl)) {
+      const row = document.createElement('div');
+      row.className = 'it';
+      const tag = document.createElement('span');
+      tag.className = 'tag';
+      tag.textContent = 'VIDEO';
+      const info = document.createElement('div');
+      info.className = 'info';
+      const nm = document.createElement('div');
+      nm.className = 'nm';
+      nm.textContent = (tab && tab.title) || t('pageVideo');
+      nm.title = pageUrl;
+      const sz = document.createElement('div');
+      sz.className = 'sz';
+      sz.textContent = t('pageVideoHint');
+      info.append(nm, sz);
+      const b = document.createElement('button');
+      b.textContent = t('downloadShort');
+      b.disabled = !st.ok;
+      b.addEventListener('click', async () => {
+        b.disabled = true;
+        const r = await browser.runtime.sendMessage({ type: 'sendPage', tabId, url: pageUrl, title: (tab && tab.title) || '' }).catch(() => ({ ok: false }));
+        b.textContent = r && r.ok ? '✓' : '!';
+        setTimeout(() => { b.textContent = t('downloadShort'); b.disabled = !st.ok; }, 1500);
+      });
+      row.append(tag, info, b);
+      list.appendChild(row);
+    }
     if (!items || !items.length) {
+      if (list.children.length) { return; }
       const d = document.createElement('div');
       d.className = 'empty';
       d.textContent = t('noMediaTab');

@@ -2,7 +2,7 @@
 (function (root) {
   'use strict';
   const vi = {
-    download: 'Tải video này', downloadShort: 'Tải', sent: 'Đã thêm vào Vexlo', noApp: 'Không kết nối được Vexlo. Hãy mở ứng dụng.',
+    pageVideo: 'Video của trang này', pageVideoHint: 'Vexlo tải bằng yt-dlp, bạn chọn chất lượng trong ứng dụng', download: 'Tải video này', downloadShort: 'Tải', sent: 'Đã thêm vào Vexlo', noApp: 'Không kết nối được Vexlo. Hãy mở ứng dụng.',
     none: 'Chưa bắt được video nào. Hãy bấm phát video rồi thử lại.', title: 'Video đã bắt được', close: 'Đóng',
     connected: 'Đã kết nối Vexlo', disconnected: 'Vexlo chưa chạy', noMediaTab: 'Chưa có video nào trong tab này.',
     stream: 'Luồng', file: 'Tệp', audio: 'Âm thanh', unknownSize: 'không rõ dung lượng', openApp: 'Mở Vexlo',
@@ -17,7 +17,7 @@
     errToken: 'Vexlo từ chối kết nối vì sai mã ghép nối. Dán lại mã trong Tùy chọn của tiện ích.',
   };
   const en = {
-    download: 'Download this video', downloadShort: 'Download', sent: 'Added to Vexlo', noApp: 'Cannot reach Vexlo. Please start the app.',
+    pageVideo: 'This page\'s video', pageVideoHint: 'Vexlo downloads it with yt-dlp; choose the quality in the app', download: 'Download this video', downloadShort: 'Download', sent: 'Added to Vexlo', noApp: 'Cannot reach Vexlo. Please start the app.',
     none: 'No media captured yet. Press play and try again.', title: 'Captured media', close: 'Close',
     connected: 'Connected to Vexlo', disconnected: 'Vexlo is not running', noMediaTab: 'No media found on this tab yet.',
     stream: 'Stream', file: 'File', audio: 'Audio', unknownSize: 'size unknown', openApp: 'Open Vexlo',
