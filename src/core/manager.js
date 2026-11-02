@@ -182,6 +182,27 @@ class DownloadManager extends EventEmitter {
     return list.length;
   }
 
+  /**
+   * "Xem thử": a playable copy of what an unfinished download has so far (a finished one just returns its file).
+   * @returns {Promise<{ok:boolean, path?:string, done?:boolean, reason?:string}>}
+   */
+  async preview(id) {
+    const t = this.tasks.get(id);
+    if (!t) { return { ok: false, reason: 'none' }; }
+    const st = t.state;
+    if (st.status === 'done' && st.path) { return { ok: true, path: st.path, done: true }; }
+    if (typeof t.dl.previewFile !== 'function') { return { ok: false, reason: 'none' }; }
+    const dir = path.join(require('os').tmpdir(), 'Vexlo-preview');
+    fs.mkdirSync(dir, { recursive: true });
+    try {
+      for (const n of fs.readdirSync(dir)) { // older copies are not needed any more
+        const f = path.join(dir, n);
+        try { if (Date.now() - fs.statSync(f).mtimeMs > 6 * 3600 * 1000) { fs.rmSync(f, { force: true }); } } catch { /* in use */ }
+      }
+    } catch { /* ignore */ }
+    try { return await t.dl.previewFile(dir); } catch (e) { return { ok: false, reason: 'error', error: e.message }; }
+  }
+
   async pause(id) {
     const t = this.tasks.get(id);
     if (!t) { return; }

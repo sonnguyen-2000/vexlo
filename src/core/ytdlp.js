@@ -8,7 +8,7 @@ const path = require('path');
 const { EventEmitter } = require('events');
 const { spawn, execFile } = require('child_process');
 const { SpeedMeter } = require('./limiter');
-const { sanitizeFilename, sleep } = require('./util');
+const { sanitizeFilename, sleep, copyPrefix } = require('./util');
 const { Download } = require('./download');
 const http = require('./http');
 const { resolveFfmpeg } = require('./segmented');
@@ -427,6 +427,27 @@ class MediaDownload extends EventEmitter {
     this.state.status = 'paused';
     this._phase = '';
     this.emit('status', this.progress());
+  }
+
+  /** A copy of the biggest piece yt-dlp has so far (the video stream; fragmented files play up to where they stop). */
+  async previewFile(outDir, maxBytes = 1024 * 1024 * 1024) {
+    const s = this.state;
+    if (!s.base) { return { ok: false, reason: 'none' }; }
+    let best = null;
+    try {
+      const prefix = (s.base + '.').toLowerCase();
+      for (const n of await fsp.readdir(s.dir)) {
+        const l = n.toLowerCase();
+        if (!l.startsWith(prefix) || /\.(ytdl|temp|tmp)$/.test(l)) { continue; }
+        const st = await fsp.stat(path.join(s.dir, n)).catch(() => null);
+        if (st && st.isFile() && (!best || st.size > best.size)) { best = { n, size: st.size }; }
+      }
+    } catch { return { ok: false, reason: 'none' }; }
+    if (!best || best.size < 256 * 1024) { return { ok: false, reason: 'small' }; }
+    const name = best.n.replace(/\.part$/i, '');
+    const to = path.join(outDir, name);
+    const bytes = await copyPrefix(path.join(s.dir, best.n), to, Math.min(best.size, maxBytes));
+    return { ok: true, path: to, bytes };
   }
 
   async cancel({ removeFile = true } = {}) {

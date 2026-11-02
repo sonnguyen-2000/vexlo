@@ -109,6 +109,26 @@ function uniquePath(dir, filename, reserved = new Set()) {
   return candidate;
 }
 
+/** Copy the first `max` bytes of a file into a new file (the part of an unfinished download that can already be played). */
+async function copyPrefix(from, to, max) {
+  const fsp = require('fs').promises;
+  const src = await fsp.open(from, 'r');
+  try {
+    const out = await fsp.open(to, 'w');
+    try {
+      const buf = Buffer.allocUnsafe(1024 * 1024);
+      let pos = 0;
+      while (pos < max) {
+        const { bytesRead } = await src.read(buf, 0, Math.min(buf.length, max - pos), pos);
+        if (!bytesRead) { break; }
+        await out.write(buf, 0, bytesRead);
+        pos += bytesRead;
+      }
+      return pos;
+    } finally { await out.close(); }
+  } finally { await src.close(); }
+}
+
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 function atomicWriteJson(file, data) {
@@ -314,7 +334,7 @@ function explainExtractFailure(attempts) {
 }
 
 module.exports = {
-  looksLikeWebPage, extractDirIn, entriesCommand, parseListedEntries,
+  copyPrefix, looksLikeWebPage, extractDirIn, entriesCommand, parseListedEntries,
   listCommand, parseListedTotal, explainExtractFailure, extractCommands, isArchive, extractDirFor, parseImportList, plainNotes, downloadLinkIn, sanitizeFilename, filenameFromContentDisposition, filenameFromUrl, extFromMime,
   pickFilename, uniquePath, sleep, atomicWriteJson,
 };

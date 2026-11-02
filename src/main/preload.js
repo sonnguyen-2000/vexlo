@@ -36,6 +36,7 @@ contextBridge.exposeInMainWorld('vexlo', {
   extractFolder: call('extract:folder'),
   archiveList: call('archive:list'),
   statsGet: call('stats:get'),
+  previewDownload: call('dl:preview'),
   ytdlpStatus: call('ytdlp:status'),
   ytdlpUpdate: call('ytdlp:update'),
   statsReset: call('stats:reset'),

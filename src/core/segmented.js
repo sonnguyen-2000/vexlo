@@ -440,6 +440,28 @@ class SegmentedDownload extends EventEmitter {
     this.emit('status', this.progress());
   }
 
+  /** The first segments that are already in place, joined into one file a player can open (video track only). */
+  async previewFile(outDir) {
+    const s = this.state;
+    const dir = this.partsDir;
+    const seg = (idx) => path.join(dir, `t0-${String(idx + 1).padStart(6, '0')}.seg`); // idx -1 is the init segment
+    const parts = [];
+    if (fs.existsSync(seg(-1))) { parts.push(seg(-1)); }
+    for (let i = 0; fs.existsSync(seg(i)); i++) { parts.push(seg(i)); }
+    if (parts.length < (parts[0] === seg(-1) ? 2 : 1)) { return { ok: false, reason: 'small' }; }
+    let ext = 'mp4';
+    try { const fh = await fsp.open(parts[0], 'r'); const b = Buffer.alloc(1); await fh.read(b, 0, 1, 0); await fh.close(); if (b[0] === 0x47) { ext = 'ts'; } } catch { return { ok: false, reason: 'none' }; }
+    const base = String(s.filename || 'video').replace(/\.[^.]+$/, '');
+    const to = path.join(outDir, `${base}.${ext}`);
+    const ws = fs.createWriteStream(to);
+    try {
+      for (const f of parts) {
+        await new Promise((resolve, reject) => { const rs = fs.createReadStream(f); rs.on('error', reject); rs.on('end', resolve); rs.pipe(ws, { end: false }); });
+      }
+    } finally { await new Promise((r) => ws.end(r)); }
+    return { ok: true, path: to, bytes: ws.bytesWritten };
+  }
+
   async cancel({ removeFile = true } = {}) {
     this._stopReason = 'cancel';
     await this._stopAll();

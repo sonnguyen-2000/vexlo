@@ -5,7 +5,7 @@ const path = require('path');
 const { EventEmitter } = require('events');
 const { request, classifyStatus, HttpError } = require('./http');
 const { SpeedMeter, SpeedLimiter } = require('./limiter');
-const { pickFilename, sleep, uniquePath, looksLikeWebPage } = require('./util');
+const { pickFilename, sleep, uniquePath, looksLikeWebPage, copyPrefix } = require('./util');
 const { folderFor } = require('./category');
 
 const MIN_SPLIT = 512 * 1024;      // never split a segment smaller than this
@@ -424,6 +424,31 @@ class Download extends EventEmitter {
     await this._closeFd();
     this.state.status = 'paused';
     this.emit('status', this.progress());
+  }
+
+  /** Bytes at the start of the file that are already in place (a player can use exactly these). */
+  contiguousBytes() {
+    const s = this.state;
+    if (!s.segments.length) { return s.downloaded || 0; } // one stream, written in order
+    let n = 0;
+    for (const seg of s.segments) {
+      if (seg.start !== n) { break; }
+      const got = Math.min(seg.pos, seg.end + 1) - seg.start;
+      n += got;
+      if (got < seg.end + 1 - seg.start) { break; }
+    }
+    return n;
+  }
+
+  /** A playable copy of what has been downloaded so far, made in `outDir`. @returns {Promise<{ok:boolean, path?:string, reason?:string, bytes?:number}>} */
+  async previewFile(outDir, maxBytes = 1024 * 1024 * 1024) {
+    const s = this.state;
+    if (!s.path || !fs.existsSync(this.partPath)) { return { ok: false, reason: 'none' }; }
+    const have = Math.min(this.contiguousBytes(), maxBytes);
+    if (have < 256 * 1024) { return { ok: false, reason: 'small' }; }
+    const to = path.join(outDir, s.filename || path.basename(s.path));
+    const bytes = await copyPrefix(this.partPath, to, have);
+    return { ok: true, path: to, bytes };
   }
 
   /** Stop and delete partial data. */

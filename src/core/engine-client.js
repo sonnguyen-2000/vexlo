@@ -130,6 +130,7 @@ class EngineClient extends EventEmitter {
   resume(id) { this._call('resume', id).catch(() => {}); }
   remove(id, opts) { return this._call('remove', id, opts); }
   probeInfo(id) { return this._call('probeInfo', id); }
+  preview(id) { return this._call('preview', id); }
   update(id, patch) { this._call('update', id, patch).catch(() => {}); }
   confirm(id, opts) { this._call('confirm', id, opts).catch(() => {}); }
   pauseAll() { return this._call('pauseAll'); }

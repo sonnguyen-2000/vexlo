@@ -702,6 +702,13 @@ function registerIpc() {
     shell.openExternal(stripHash(page) + '#vexlo-refresh');
     return true;
   });
+  // "Xem thử phần đã tải": open what an unfinished download has so far in the computer's own player.
+  ipcMain.handle('dl:preview', async (_e, id) => {
+    const r = await manager.preview(id).catch(() => ({ ok: false, reason: 'error' }));
+    if (!r || !r.ok) { return { ok: false, reason: (r && r.reason) || 'error' }; }
+    const err = await shell.openPath(r.path);
+    return err ? { ok: false, reason: 'open', error: err } : { ok: true, done: !!r.done };
+  });
   ipcMain.handle('dl:hash', async (e, id) => {
     const t = manager.get(id);
     const file = t && t.state.path;
@@ -1331,6 +1338,7 @@ function main() {
       connections: settings.connections, speedLimit: settings.speedLimitKB * 1024, binDir: toolsDir(), media: mediaConfig(),
     });
     await manager.ready; // the engine process has loaded the saved downloads
+    try { fs.rmSync(path.join(require('os').tmpdir(), 'Vexlo-preview'), { recursive: true, force: true }); } catch { /* copies from the last run, may be in use */ }
     stats = new Stats(path.join(app.getPath('userData'), 'stats.json'));
     wireManager();
     registerIpc();

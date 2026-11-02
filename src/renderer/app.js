@@ -426,6 +426,11 @@
     const entries = [
       one && one.status === 'done' && [T('Mở tệp'), 'i-open', () => openFile(one.id)],
       one && [T('Mở thư mục chứa tệp'), 'i-folder', () => bridge.showInFolder(one.id)],
+      one && one.status !== 'done' && !one.pending && (one.downloaded > 0 || one.segDone > 0) && [T('Xem thử phần đã tải'), 'i-film', async () => {
+        const r = await bridge.previewDownload(one.id);
+        if (r && r.ok) { return; }
+        toast(({ small: T('Chưa tải đủ để xem thử, hãy chờ thêm một chút.'), none: T('Chưa có dữ liệu để xem thử.'), open: T('Không mở được trình phát video trên máy.') })[r && r.reason] || T('Không xem thử được video này.'), true);
+      }],
       canRes && [T('Tiếp tục'), 'i-play', () => bridge.resume(sel.map((t) => t.id))],
       [T('Giới hạn tốc độ tệp này…'), 'i-pause', () => openLimit(sel)],
       sel.some((t) => t.status === 'queued') && [T('Ưu tiên tải trước'), 'i-play', () => bridge.prioritize(sel.map((t) => t.id), 'top')],

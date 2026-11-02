@@ -118,6 +118,8 @@
     'yt-dlp báo xong nhưng không thấy tệp video.': 'yt-dlp says it finished but the video file is missing.',
     'Đang lấy thông tin video…': 'Getting video details…', 'Chưa lấy được thông tin video': 'Could not get the video details', 'Không xem trước được video này.': 'This video cannot be previewed.', 'Không có ảnh xem trước.': 'No preview picture.',
     'Không đọc được thông tin video.': 'Could not read the video details.',
+    'Xem thử phần đã tải': 'Preview the part downloaded', 'Chưa tải đủ để xem thử, hãy chờ thêm một chút.': 'Not enough downloaded to preview yet, wait a little longer.', 'Chưa có dữ liệu để xem thử.': 'There is no data to preview yet.',
+    'Không mở được trình phát video trên máy.': 'Could not open a video player on this computer.', 'Không xem thử được video này.': 'This video cannot be previewed.',
     'Tự giải nén file nén sau khi tải xong': 'Extract archives automatically after downloading', '.zip, .7z, .rar, .tar... được giải nén vào một thư mục cùng tên, ngay cạnh file. File nén gốc được giữ lại. Dùng WinRAR hoặc 7-Zip nếu máy có.': '.zip, .7z, .rar, .tar... are extracted into a folder with the same name next to the file. The original archive is kept. Uses WinRAR or 7-Zip if installed.',
     'Giải nén tại đây': 'Extract here', 'Đang giải nén...': 'Extracting...', 'Đã giải nén': 'Extracted', 'Không giải nén được': 'Could not extract',
     'Cập nhật & công cụ': 'Updates & tools', 'Danh sách tải': 'Download list', 'Chẩn đoán lỗi': 'Troubleshooting',
