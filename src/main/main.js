@@ -781,7 +781,9 @@ function registerIpc() {
       if (t.status === 'error') { lines.push(`error: ${String(t.error || '').slice(0, 200)} (${t.kind})`); }
     }
     lines.push('count by status: ' + JSON.stringify(counts), '', '== connection log (last 150 events: retries, slow segments, engine stalls)');
-    lines.push(...(netLog.length ? netLog.slice(-150) : ['(nothing reported)']), '', '== update.log (last 200 lines)');
+    lines.push(...(netLog.length ? netLog.slice(-150) : ['(nothing reported)']), '', '== native-host.log (browser extension asking the app to start, last 40 lines)');
+    try { lines.push(...fs.readFileSync(path.join(app.getPath('userData'), 'native-host.log'), 'utf8').split('\n').slice(-40)); } catch { lines.push('(no native-host.log: the extension never reached the app helper)'); }
+    lines.push('', '== update.log (last 200 lines)');
     try { lines.push(...fs.readFileSync(path.join(app.getPath('userData'), 'update.log'), 'utf8').split('\n').slice(-200)); } catch { lines.push('(no update.log)'); }
     const win = BrowserWindow.fromWebContents(e.sender);
     const r = await dialog.showSaveDialog(win, { defaultPath: path.join(app.getPath('desktop'), `vexlo-log-${VERSION}.txt`), filters: [{ name: 'Text', extensions: ['txt'] }] });
@@ -1359,6 +1361,8 @@ function main() {
       e.preventDefault();
       const m = manager;
       manager = null;
+      // Never let a stuck shutdown keep the process (and its single-instance lock) alive: the browser extension could not start a new copy.
+      setTimeout(() => app.exit(0), 6000).unref();
       Promise.resolve()
         .then(() => m.shutdown())
         .then(() => (api ? api.close() : null))

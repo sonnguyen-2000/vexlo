@@ -9,6 +9,14 @@ const { spawn } = require('child_process');
 const settingsPath = process.argv[2];
 const appExe = process.argv[3] || ''; // the real Vexlo.exe (empty when running from source)
 
+const logPath = settingsPath ? require('path').join(require('path').dirname(settingsPath), 'native-host.log') : '';
+function log(m) {
+  try {
+    if (logPath && fs.existsSync(logPath) && fs.statSync(logPath).size > 50000) { fs.writeFileSync(logPath, ''); }
+    if (logPath) { fs.appendFileSync(logPath, `${new Date().toISOString()} ${m}\n`); }
+  } catch { /* logging is best effort */ }
+}
+
 function readConfig() {
   const s = JSON.parse(fs.readFileSync(settingsPath, 'utf8'));
   return { ok: true, app: 'Vexlo', port: Number(s.port) || 6877, token: String(s.token || '') };
@@ -17,11 +25,13 @@ function readConfig() {
 /** Start the app hidden in the tray. A second launch while it already runs just hands over to it. */
 function launch() {
   const cfg = readConfig();
-  if (!appExe || !fs.existsSync(appExe)) { return { ok: false, error: 'no-app-path' }; }
+  if (!appExe || !fs.existsSync(appExe)) { log(`launch: app not found (${appExe || 'no path'})`); return { ok: false, error: 'no-app-path' }; }
   const env = { ...process.env };
   delete env.ELECTRON_RUN_AS_NODE; // this host runs the exe as plain node; the app itself must start as Electron
   const child = spawn(appExe, ['--hidden'], { detached: true, stdio: 'ignore', env, windowsHide: false });
+  child.on('error', (e) => log('launch: spawn failed ' + e.message));
   child.unref();
+  log(`launch: started ${appExe}`);
   return cfg;
 }
 
@@ -41,7 +51,8 @@ process.stdin.on('data', (chunk) => {
     let msg = {};
     try { msg = JSON.parse(buf.subarray(4, 4 + len).toString('utf8')) || {}; } catch { msg = {}; }
     buf = buf.subarray(4 + len);
-    try { send(msg.cmd === 'launch' ? launch() : readConfig()); } catch (e) { send({ ok: false, error: String(e && e.message || e) }); }
+    log('request: ' + (msg.cmd || 'config'));
+    try { send(msg.cmd === 'launch' ? launch() : readConfig()); } catch (e) { log('error: ' + (e && e.message || e)); send({ ok: false, error: String(e && e.message || e) }); }
   }
 });
 process.stdin.on('end', () => process.exit(0));
