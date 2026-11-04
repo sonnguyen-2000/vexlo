@@ -1,7 +1,7 @@
 {
   "manifest_version": 2,
   "name": "Vexlo Integration",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "description": "Gửi link tải và video trong Firefox sang ứng dụng Vexlo (kiểu IDM).",
   "icons": {
     "48": "icons/icon.svg",

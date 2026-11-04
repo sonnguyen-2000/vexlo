@@ -100,7 +100,7 @@ function launchApp() {
         const p = await pingOnce(1500);
         if (p.ok || p.reason === 'unauthorized') { return true; }
         // The copy we started may have found the previous one still shutting down and given up: ask again now and then (a second launch just hands over to a running instance).
-        if (Date.now() >= nextKick) { nextKick = Date.now() + 15000; browser.runtime.sendNativeMessage('dev.vexlo.host', { cmd: 'launch', via: 'explorer' }).catch(() => {}); }
+        if (Date.now() >= nextKick) { nextKick = Date.now() + 15000; browser.runtime.sendNativeMessage('dev.vexlo.host', { cmd: 'launch' }).catch(() => {}); }
         await new Promise((ok) => setTimeout(ok, 500));
       }
     } catch { /* host missing: fall back to "app not running" */ }

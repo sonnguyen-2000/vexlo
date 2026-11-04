@@ -22,25 +22,43 @@ function readConfig() {
   return { ok: true, app: 'Vexlo', port: Number(s.port) || 6877, token: String(s.token || '') };
 }
 
+/** Windows: ask the WMI service to create the process. Firefox puts this helper in a job object that kills everything the helper started
+ *  as soon as the helper ends (the log showed every copy dying seconds after it started); a process created by WMI is outside that job. */
+function startViaCim() {
+  return new Promise((resolve) => {
+    const q = (v) => "'" + String(v).replace(/'/g, "''") + "'";
+    const script = `$r = Invoke-CimMethod -ClassName Win32_Process -MethodName Create -Arguments @{ CommandLine = ${q('"' + appExe + '" --hidden')}; CurrentDirectory = ${q(require('path').dirname(appExe))} }; exit ([int]$r.ReturnValue)`;
+    let done = false;
+    const end = (ok, why) => { if (!done) { done = true; clearTimeout(timer); if (!ok) { log('launch: cim failed ' + why); } resolve(ok); } };
+    let ps;
+    try { ps = spawn('powershell.exe', ['-NoProfile', '-NonInteractive', '-WindowStyle', 'Hidden', '-EncodedCommand', Buffer.from(script, 'utf16le').toString('base64')], { stdio: 'ignore', windowsHide: true }); } catch (e) { return end(false, e.message); }
+    const timer = setTimeout(() => end(false, 'timeout'), 8000);
+    ps.on('error', (e) => end(false, e.message));
+    ps.on('exit', (code) => end(code === 0, 'exit code ' + code));
+  });
+}
+
 /** Start the app hidden in the tray. A second launch while it already runs just hands over to it. */
-function launch(via) {
+async function launch(via) {
   const cfg = readConfig();
   if (!appExe || !fs.existsSync(appExe)) { log(`launch: app not found (${appExe || 'no path'})`); return { ok: false, error: 'no-app-path' }; }
+  if (process.platform === 'win32' && via !== 'direct') {
+    if (via !== 'explorer' && await startViaCim()) { log(`launch: started ${appExe} via cim`); return cfg; }
+    // Fallback: Windows Explorer also starts it outside that job; it cannot pass arguments, so a short-lived flag file asks for "hidden".
+    try { fs.writeFileSync(require('path').join(require('path').dirname(settingsPath), 'start-hidden.flag'), String(Date.now())); } catch { /* ignore */ }
+    const ex = spawn('explorer.exe', [appExe], { detached: true, stdio: 'ignore', windowsHide: true });
+    ex.on('error', (e) => log('launch: explorer failed ' + e.message));
+    ex.unref();
+    log(`launch: started ${appExe} via explorer`);
+    return cfg;
+  }
   const env = { ...process.env };
   delete env.ELECTRON_RUN_AS_NODE; // this host runs the exe as plain node; the app itself must start as Electron
-  let child;
-  if (via === 'explorer') {
-    // Firefox may put this helper in a job that is closed (killing everything it started) as soon as the helper ends.
-    // Windows Explorer starts the app outside that job; it cannot pass arguments, so a short-lived flag file asks for "hidden".
-    try { fs.writeFileSync(require('path').join(require('path').dirname(settingsPath), 'start-hidden.flag'), String(Date.now())); } catch { /* ignore */ }
-    child = spawn('explorer.exe', [appExe], { detached: true, stdio: 'ignore', env, windowsHide: true });
-  } else {
-    child = spawn(appExe, ['--hidden'], { detached: true, stdio: 'ignore', env, windowsHide: false });
-  }
+  const child = spawn(appExe, ['--hidden'], { detached: true, stdio: 'ignore', env, windowsHide: false });
   child.on('error', (e) => log('launch: spawn failed ' + e.message));
   child.on('exit', (code, sig) => log(`launch: the started process (pid ${child.pid}) ended with code ${code} ${sig || ''}`));
   child.unref();
-  log(`launch: started ${appExe}${via ? ' via ' + via : ''}`);
+  log(`launch: started ${appExe}`);
   return cfg;
 }
 
@@ -52,7 +70,7 @@ function send(obj) {
 }
 
 let buf = Buffer.alloc(0);
-process.stdin.on('data', (chunk) => {
+process.stdin.on('data', async (chunk) => {
   buf = Buffer.concat([buf, chunk]);
   while (buf.length >= 4) {
     const len = buf.readUInt32LE(0);
@@ -62,9 +80,8 @@ process.stdin.on('data', (chunk) => {
     buf = buf.subarray(4 + len);
     log('request: ' + (msg.cmd || 'config'));
     try {
-      const out = msg.cmd === 'launch' ? launch(msg.via) : readConfig();
-      // Stay alive a moment after a launch so an early exit of the started copy is written to the log.
-      if (msg.cmd === 'launch' && out && out.ok) { setTimeout(() => send(out), 2500); } else { send(out); }
+      const out = msg.cmd === 'launch' ? await launch(msg.via) : readConfig();
+      send(out);
     } catch (e) { log('error: ' + (e && e.message || e)); send({ ok: false, error: String(e && e.message || e) }); }
   }
 });
