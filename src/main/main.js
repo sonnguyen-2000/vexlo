@@ -783,6 +783,8 @@ function registerIpc() {
     lines.push('count by status: ' + JSON.stringify(counts), '', '== connection log (last 150 events: retries, slow segments, engine stalls)');
     lines.push(...(netLog.length ? netLog.slice(-150) : ['(nothing reported)']), '', '== native-host.log (browser extension asking the app to start, last 40 lines)');
     try { lines.push(...fs.readFileSync(path.join(app.getPath('userData'), 'native-host.log'), 'utf8').split('\n').slice(-40)); } catch { lines.push('(no native-host.log: the extension never reached the app helper)'); }
+    lines.push('', '== startup.log (last 60 lines)');
+    try { lines.push(...fs.readFileSync(path.join(app.getPath('userData'), 'startup.log'), 'utf8').split('\n').slice(-60)); } catch { lines.push('(no startup.log)'); }
     lines.push('', '== update.log (last 200 lines)');
     try { lines.push(...fs.readFileSync(path.join(app.getPath('userData'), 'update.log'), 'utf8').split('\n').slice(-200)); } catch { lines.push('(no update.log)'); }
     const win = BrowserWindow.fromWebContents(e.sender);
@@ -1323,6 +1325,15 @@ function startAutoUpdate() {
   } catch { /* electron-updater not installed */ }
 }
 
+/** Small start-up trace (startup.log next to settings.json): shows whether a copy started by the browser helper got going, or why it stopped. */
+function slog(msg) {
+  try {
+    const f = path.join(app.getPath('userData'), 'startup.log');
+    try { if (fs.statSync(f).size > 60000) { fs.writeFileSync(f, ''); } } catch { /* new file */ }
+    fs.appendFileSync(f, `${new Date().toISOString()} pid ${process.pid} ${msg}\n`);
+  } catch { /* best effort */ }
+}
+
 /** True when the browser helper started us through Explorer (it cannot pass --hidden) and left a fresh flag file. Reading it removes it. */
 function startedHiddenByHelper() {
   try {
@@ -1334,12 +1345,14 @@ function startedHiddenByHelper() {
 }
 
 function main() {
-  if (!app.requestSingleInstanceLock()) { app.quit(); return; }
+  slog(`start v${VERSION} args=${process.argv.slice(1).join(' ') || '-'}`);
+  if (!app.requestSingleInstanceLock()) { slog('another copy is running (single-instance lock): exiting'); app.quit(); return; }
   app.on('second-instance', (_e, argv) => { if (!(argv || []).includes('--hidden') && !startedHiddenByHelper()) { showMain(); } });
   app.setAppUserModelId('dev.vexlo.app');
   Menu.setApplicationMenu(null);
 
   app.whenReady().then(async () => {
+    slog('ready');
     migrateOldData();
     loadSettings();
     readJustUpdated();
@@ -1350,6 +1363,7 @@ function main() {
       connections: settings.connections, speedLimit: settings.speedLimitKB * 1024, binDir: toolsDir(), media: mediaConfig(),
     });
     await manager.ready; // the engine process has loaded the saved downloads
+    slog('engine ready');
     try { fs.rmSync(path.join(require('os').tmpdir(), 'Vexlo-preview'), { recursive: true, force: true }); } catch { /* copies from the last run, may be in use */ }
     stats = new Stats(path.join(app.getPath('userData'), 'stats.json'));
     wireManager();
@@ -1362,9 +1376,11 @@ function main() {
     setInterval(runSchedule, 20000);
     try { powerMonitor.on('resume', retryAfterWake); } catch { /* not available */ }
     startAutoUpdate();
+    slog('started');
   });
 
   app.on('before-quit', (e) => {
+    slog('quit requested');
     if (quitting && !manager) { return; }
     quitting = true;
     if (manager) {

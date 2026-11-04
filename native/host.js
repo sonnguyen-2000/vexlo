@@ -38,6 +38,7 @@ function launch(via) {
     child = spawn(appExe, ['--hidden'], { detached: true, stdio: 'ignore', env, windowsHide: false });
   }
   child.on('error', (e) => log('launch: spawn failed ' + e.message));
+  child.on('exit', (code, sig) => log(`launch: the started process (pid ${child.pid}) ended with code ${code} ${sig || ''}`));
   child.unref();
   log(`launch: started ${appExe}${via ? ' via ' + via : ''}`);
   return cfg;
@@ -60,7 +61,11 @@ process.stdin.on('data', (chunk) => {
     try { msg = JSON.parse(buf.subarray(4, 4 + len).toString('utf8')) || {}; } catch { msg = {}; }
     buf = buf.subarray(4 + len);
     log('request: ' + (msg.cmd || 'config'));
-    try { send(msg.cmd === 'launch' ? launch(msg.via) : readConfig()); } catch (e) { log('error: ' + (e && e.message || e)); send({ ok: false, error: String(e && e.message || e) }); }
+    try {
+      const out = msg.cmd === 'launch' ? launch(msg.via) : readConfig();
+      // Stay alive a moment after a launch so an early exit of the started copy is written to the log.
+      if (msg.cmd === 'launch' && out && out.ok) { setTimeout(() => send(out), 2500); } else { send(out); }
+    } catch (e) { log('error: ' + (e && e.message || e)); send({ ok: false, error: String(e && e.message || e) }); }
   }
 });
 process.stdin.on('end', () => process.exit(0));
