@@ -8,8 +8,8 @@
 
   const vi = /^vi/i.test(navigator.language || '');
   const L = vi
-    ? { download: 'Tải video này', sent: 'Đã thêm vào Vexlo', noApp: 'Không kết nối được Vexlo. Hãy mở ứng dụng.', none: 'Chưa bắt được video. Hãy bấm phát rồi thử lại.', title: 'Chọn video để tải', stream: 'Luồng', audio: 'Âm thanh', file: 'Tệp', failed: 'Vexlo báo lỗi' }
-    : { download: 'Download this video', sent: 'Added to Vexlo', noApp: 'Cannot reach Vexlo. Please start the app.', none: 'No media captured yet. Press play and try again.', title: 'Choose media to download', stream: 'Stream', audio: 'Audio', file: 'File', failed: 'Vexlo reported an error' };
+    ? { download: 'Tải video này', sent: 'Đã thêm vào Vexlo', noApp: 'Không kết nối được Vexlo. Hãy mở ứng dụng.', none: 'Chưa bắt được video. Hãy bấm phát rồi thử lại.', title: 'Chọn video để tải', stream: 'Luồng', audio: 'Âm thanh', file: 'Tệp', failed: 'Vexlo báo lỗi', sending: 'Đang gửi sang Vexlo… (nếu app đang tắt, mất vài giây để mở)' }
+    : { download: 'Download this video', sent: 'Added to Vexlo', noApp: 'Cannot reach Vexlo. Please start the app.', none: 'No media captured yet. Press play and try again.', title: 'Choose media to download', stream: 'Stream', audio: 'Audio', file: 'File', failed: 'Vexlo reported an error', sending: 'Sending to Vexlo… (if the app is closed it needs a few seconds to start)' };
 
   let enabled = true;
   api.runtime.sendMessage({ type: 'getSettings' }).then((s) => { enabled = !s || s.floating !== false; }).catch(() => {});
@@ -58,7 +58,7 @@
     (document.documentElement || document.body).appendChild(host);
   }
 
-  function showToast(text, isErr) {
+  function showToast(text, isErr, ms) {
     build();
     toast.textContent = text;
     toast.className = 'toast' + (isErr ? ' err' : '');
@@ -67,11 +67,12 @@
     toast.style.left = Math.max(8, r.left + 10) + 'px';
     toast.style.top = Math.max(8, Math.min(window.innerHeight - 50, r.top + 52)) + 'px';
     clearTimeout(showToast.t);
-    showToast.t = setTimeout(() => { toast.style.display = 'none'; }, 2600);
+    showToast.t = setTimeout(() => { toast.style.display = 'none'; }, ms || 2600);
   }
 
   async function doSend(msg) {
     closePanel();
+    showToast(L.sending, false, 60000);
     let r;
     try { r = await api.runtime.sendMessage(msg); } catch { r = { ok: false }; }
     if (r && r.ok) { showToast(L.sent, false); }

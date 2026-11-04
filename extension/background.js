@@ -94,10 +94,13 @@ function launchApp() {
         settings.token = r.token; settings.port = r.port;
         await browser.storage.local.set({ token: r.token, port: r.port });
       }
-      const until = Date.now() + 25000; // a cold start of the app can take a while
+      const until = Date.now() + 40000; // a cold start of the app can take a while
+      let nextKick = Date.now() + 6000;
       while (Date.now() < until) {
         const p = await pingOnce(1500);
         if (p.ok || p.reason === 'unauthorized') { return true; }
+        // The copy we started may have found the previous one still shutting down and given up: ask again now and then (a second launch just hands over to a running instance).
+        if (Date.now() >= nextKick) { nextKick = Date.now() + 6000; browser.runtime.sendNativeMessage('dev.vexlo.host', { cmd: 'launch' }).catch(() => {}); }
         await new Promise((ok) => setTimeout(ok, 500));
       }
     } catch { /* host missing: fall back to "app not running" */ }
