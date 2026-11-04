@@ -23,15 +23,23 @@ function readConfig() {
 }
 
 /** Start the app hidden in the tray. A second launch while it already runs just hands over to it. */
-function launch() {
+function launch(via) {
   const cfg = readConfig();
   if (!appExe || !fs.existsSync(appExe)) { log(`launch: app not found (${appExe || 'no path'})`); return { ok: false, error: 'no-app-path' }; }
   const env = { ...process.env };
   delete env.ELECTRON_RUN_AS_NODE; // this host runs the exe as plain node; the app itself must start as Electron
-  const child = spawn(appExe, ['--hidden'], { detached: true, stdio: 'ignore', env, windowsHide: false });
+  let child;
+  if (via === 'explorer') {
+    // Firefox may put this helper in a job that is closed (killing everything it started) as soon as the helper ends.
+    // Windows Explorer starts the app outside that job; it cannot pass arguments, so a short-lived flag file asks for "hidden".
+    try { fs.writeFileSync(require('path').join(require('path').dirname(settingsPath), 'start-hidden.flag'), String(Date.now())); } catch { /* ignore */ }
+    child = spawn('explorer.exe', [appExe], { detached: true, stdio: 'ignore', env, windowsHide: true });
+  } else {
+    child = spawn(appExe, ['--hidden'], { detached: true, stdio: 'ignore', env, windowsHide: false });
+  }
   child.on('error', (e) => log('launch: spawn failed ' + e.message));
   child.unref();
-  log(`launch: started ${appExe}`);
+  log(`launch: started ${appExe}${via ? ' via ' + via : ''}`);
   return cfg;
 }
 
@@ -52,7 +60,7 @@ process.stdin.on('data', (chunk) => {
     try { msg = JSON.parse(buf.subarray(4, 4 + len).toString('utf8')) || {}; } catch { msg = {}; }
     buf = buf.subarray(4 + len);
     log('request: ' + (msg.cmd || 'config'));
-    try { send(msg.cmd === 'launch' ? launch() : readConfig()); } catch (e) { log('error: ' + (e && e.message || e)); send({ ok: false, error: String(e && e.message || e) }); }
+    try { send(msg.cmd === 'launch' ? launch(msg.via) : readConfig()); } catch (e) { log('error: ' + (e && e.message || e)); send({ ok: false, error: String(e && e.message || e) }); }
   }
 });
 process.stdin.on('end', () => process.exit(0));

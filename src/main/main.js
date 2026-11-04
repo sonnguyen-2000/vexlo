@@ -1323,9 +1323,19 @@ function startAutoUpdate() {
   } catch { /* electron-updater not installed */ }
 }
 
+/** True when the browser helper started us through Explorer (it cannot pass --hidden) and left a fresh flag file. Reading it removes it. */
+function startedHiddenByHelper() {
+  try {
+    const f = path.join(app.getPath('userData'), 'start-hidden.flag');
+    const age = Date.now() - Number(fs.readFileSync(f, 'utf8'));
+    fs.rmSync(f, { force: true });
+    return age >= 0 && age < 90000;
+  } catch { return false; }
+}
+
 function main() {
   if (!app.requestSingleInstanceLock()) { app.quit(); return; }
-  app.on('second-instance', (_e, argv) => { if (!(argv || []).includes('--hidden')) { showMain(); } });
+  app.on('second-instance', (_e, argv) => { if (!(argv || []).includes('--hidden') && !startedHiddenByHelper()) { showMain(); } });
   app.setAppUserModelId('dev.vexlo.app');
   Menu.setApplicationMenu(null);
 
@@ -1347,7 +1357,7 @@ function main() {
     registerNativeHost();
     applySettings(null);
     createTray();
-    createMainWindow({ hidden: process.argv.includes('--hidden') && !!tray });
+    createMainWindow({ hidden: (process.argv.includes('--hidden') || startedHiddenByHelper()) && !!tray });
     app.on('activate', showMain);
     setInterval(runSchedule, 20000);
     try { powerMonitor.on('resume', retryAfterWake); } catch { /* not available */ }
