@@ -214,3 +214,75 @@ fn bucket_waits_for_budget_and_bursts_one_second() {
     assert_eq!(b.try_take(1000, 100), Ok(()));
     assert!(matches!(b.try_take(1000, 1), Err(ms) if ms >= 5));
 }
+
+// ---------------------------------------------------------------- HTTP status handling
+
+use vexlo_core::probe;
+
+#[test]
+fn status_classification_matches_js() {
+    let mut bad = vec![];
+    for r in rows("classify") {
+        let (status, ra) = r[0].split_once('|').unwrap();
+        let e = probe::classify_status(status.parse().unwrap(), ra);
+        let got = format!("{}|{}|{}", e.message, e.fatal as u8, e.retry_after_ms);
+        check("classify", &got, &r[1], &r[0], &mut bad);
+    }
+    report(bad);
+}
+
+#[test]
+fn probe_answer_matches_js() {
+    let mut bad = vec![];
+    for r in rows("probe") {
+        let f: Vec<&str> = r[0].split('|').collect();
+        let got = match probe::interpret_probe(f[0].parse().unwrap(), f[1], f[2], "") {
+            Ok((size, res)) => format!("ok|{}|{}", size, res as u8),
+            Err(e) => format!("err|{}|{}", e.fatal as u8, e.status.unwrap()),
+        };
+        check("probe", &got, &r[1], &r[0], &mut bad);
+    }
+    report(bad);
+}
+
+// ---------------------------------------------------------------- proxy text
+
+use vexlo_core::proxy;
+
+#[test]
+fn proxy_text_matches_js() {
+    let mut bad = vec![];
+    for r in rows("proxy") {
+        let input = unhex(&r[0]);
+        let spec = proxy::parse_proxy(&input);
+        // JS: an empty text is accepted (proxy off); everything else is accepted when it parses
+        let ok = input.trim().is_empty() || spec.is_some();
+        let got = format!("{}|{}", ok as u8, hex(&proxy::proxy_text(&input)));
+        check("proxy", &got, &r[1], &input, &mut bad);
+    }
+    report(bad);
+}
+
+fn hex(s: &str) -> String {
+    s.bytes().map(|b| format!("{:02x}", b)).collect()
+}
+
+#[test]
+fn proxy_bypass_matches_js() {
+    let mut bad = vec![];
+    for r in rows("bypass") {
+        let (host, flag) = r[0].split_once('|').unwrap();
+        let got = if proxy::bypass_proxy(host, flag == "1") { "1" } else { "0" };
+        check("bypass", got, &r[1], &r[0], &mut bad);
+    }
+    report(bad);
+}
+
+#[test]
+fn proxy_details_are_parsed() {
+    let p = proxy::parse_proxy("socks5://us%40er:p%3Ass@[::1]:9050").unwrap();
+    assert!(p.socks && p.host == "::1" && p.port == 9050 && p.user == "us@er" && p.pass == "p:ss");
+    let p = proxy::parse_proxy("proxy.example.com:3128").unwrap();
+    assert!(!p.socks && !p.https && p.port == 3128 && p.user.is_empty());
+    assert_eq!(proxy::parse_proxy("https://h").unwrap().port, 443);
+}

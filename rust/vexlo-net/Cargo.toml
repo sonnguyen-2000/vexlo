@@ -1,0 +1,12 @@
+[package]
+name = "vexlo-net"
+version = "0.1.0"
+edition = "2021"
+description = "Network side of the Vexlo engine: HTTP client, probe, speed limiter, downloads"
+license = "MIT"
+
+[dependencies]
+vexlo-core = { path = "../vexlo-core" }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "time", "sync", "fs", "io-util", "net"] }
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "stream", "socks"] }
+futures-util = "0.3"

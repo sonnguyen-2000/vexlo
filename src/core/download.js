@@ -31,15 +31,8 @@ function retryDelay(attempt, retryAfter) {
   return retryAfter || Math.min(15000, 400 * 2 ** (attempt - 1));
 }
 
-/**
- * Probe a URL: size, range support, name and validators.
- * Uses GET with "Range: bytes=0-0" because many servers mishandle HEAD.
- */
-async function probe(url, headers = {}, signal) {
-  const { res, url: finalUrl } = await request(url, { headers: { ...headers, range: 'bytes=0-0' }, signal });
-  const status = res.statusCode;
-  const h = res.headers;
-  res.destroy();
+/** What the answer to the one-byte probe request says: total size and whether ranges work. Throws for an error status. */
+function interpretProbe(status, h) {
   let size = 0;
   let resumable = false;
   if (status === 206) {
@@ -55,6 +48,19 @@ async function probe(url, headers = {}, signal) {
   } else {
     throw classifyStatus(status, { headers: h });
   }
+  return { size, resumable };
+}
+
+/**
+ * Probe a URL: size, range support, name and validators.
+ * Uses GET with "Range: bytes=0-0" because many servers mishandle HEAD.
+ */
+async function probe(url, headers = {}, signal) {
+  const { res, url: finalUrl } = await request(url, { headers: { ...headers, range: 'bytes=0-0' }, signal });
+  const status = res.statusCode;
+  const h = res.headers;
+  res.destroy();
+  const { size, resumable } = interpretProbe(status, h);
   const type = (h['content-type'] || '').split(';')[0].trim().toLowerCase();
   return {
     finalUrl,
@@ -480,4 +486,4 @@ class Download extends EventEmitter {
   }
 }
 
-module.exports = { Download, probe, MIN_SPLIT, MIN_SEGMENT, planSegments, retryDelay };
+module.exports = { Download, probe, MIN_SPLIT, MIN_SEGMENT, planSegments, retryDelay, interpretProbe };

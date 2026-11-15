@@ -111,8 +111,8 @@ fn hex_val(b: u8) -> Option<u8> {
     }
 }
 
-/// `decodeURIComponent` that returns the input unchanged when it is malformed.
-pub fn safe_decode(s: &str) -> String {
+/// `decodeURIComponent`: None when the text is malformed (a bad `%` sequence or bytes that are not UTF-8).
+pub fn decode_uri_component(s: &str) -> Option<String> {
     let b = s.as_bytes();
     let mut out: Vec<u8> = Vec::with_capacity(b.len());
     let mut i = 0;
@@ -125,14 +125,19 @@ pub fn safe_decode(s: &str) -> String {
                     out.push(h * 16 + l);
                     i += 3;
                 }
-                _ => return s.to_string(),
+                _ => return None,
             }
         } else {
             out.push(b[i]);
             i += 1;
         }
     }
-    String::from_utf8(out).unwrap_or_else(|_| s.to_string())
+    String::from_utf8(out).ok()
+}
+
+/// `decodeURIComponent` that returns the input unchanged when it is malformed.
+pub fn safe_decode(s: &str) -> String {
+    decode_uri_component(s).unwrap_or_else(|| s.to_string())
 }
 
 fn skip_space(chars: &[char], mut i: usize) -> usize {

@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["vexlo-core"]
+members = ["vexlo-core", "vexlo-net"]
 
 [profile.release]
 lto = true

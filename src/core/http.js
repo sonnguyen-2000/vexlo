@@ -289,4 +289,4 @@ async function fetchBuffer(url, opts = {}) {
   return { body: Buffer.concat(chunks), url: finalUrl, headers: res.headers };
 }
 
-module.exports = { setProxy, getProxy, request, fetchBuffer, HttpError, classifyStatus, lowerKeys, DEFAULT_UA };
+module.exports = { setProxy, getProxy, bypassProxy, request, fetchBuffer, HttpError, classifyStatus, lowerKeys, DEFAULT_UA };

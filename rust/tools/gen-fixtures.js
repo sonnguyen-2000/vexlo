@@ -6,7 +6,8 @@ const fs = require('fs');
 const path = require('path');
 const util = require('../../src/core/util');
 const category = require('../../src/core/category');
-const { Download, planSegments, retryDelay } = require('../../src/core/download');
+const { Download, planSegments, retryDelay, interpretProbe } = require('../../src/core/download');
+const { classifyStatus, setProxy, getProxy, bypassProxy } = require('../../src/core/http');
 const { SpeedMeter } = require('../../src/core/limiter');
 
 const hex = (s) => Buffer.from(String(s), 'utf8').toString('hex');
@@ -17,7 +18,7 @@ const pick = (a) => a[Math.floor(rnd() * a.length)];
 const POOL = ['a', 'B', 'z', '0', '9', ' ', ' ', '.', '.', '-', '_', '/', '\\', ':', '*', '?', '"', '<', '>', '|', '\t', '\n', 'é', 'ü', 'ệ', 'Ă', '日', '本', '\u00a0', '\u3000', '\ufffd', '\ufeff', '%', '%20', '%C3%A9', '%zz', '%E6%97%A5', ';', '=', "'", 'file', 'CON', 'nul', 'com1', 'LPT9', '.mp4', '.exe', '.zip', 'x'.repeat(40)];
 const randomString = (n) => { let s = ''; const k = 1 + Math.floor(rnd() * n); for (let i = 0; i < k; i++) { s += pick(POOL); } return s; };
 
-const out = { sanitize: [], cd: [], url: [], mime: [], web: [], pick: [], cat: [], plan: [], retry: [], sched: [], meter: [] };
+const out = { sanitize: [], cd: [], url: [], mime: [], web: [], pick: [], cat: [], plan: [], retry: [], sched: [], meter: [], classify: [], probe: [], proxy: [], bypass: [] };
 
 const sanitizeCases = ['', ' ', '...', 'a.b.c', 'CON', 'con.txt', 'com1', 'LPT1.log', 'COM0', 'a'.repeat(300) + '.mp4', '日本語'.repeat(80) + '.zip', 'x'.repeat(179) + '.verylongextension1234567890', 'file name . ', '  .hidden', 'a\u00a0\u00a0b', 'a:b*c?d"e<f>g|h', 'tab\there', '\ufffdabc\ufffd', '😀'.repeat(100) + '.mp4', '..a..', 'name.'];
 for (let i = 0; i < 400; i++) { sanitizeCases.push(randomString(12)); }
@@ -126,6 +127,35 @@ for (let i = 0; i < 300; i++) {
   }
   Date.now = realNow;
   out.meter.push([`${windowMs}|${ops.join(',')}`, res.join(',')]);
+}
+
+// ---- HTTP status handling
+for (const status of [400, 401, 403, 404, 408, 410, 416, 429, 500, 502, 503, 504, 599]) {
+  for (const ra of ['', '5', '120', 'abc', '0', 'Wed, 21 Oct 2026 07:28:00 GMT']) {
+    const e = classifyStatus(status, { headers: ra ? { 'retry-after': ra } : {} });
+    const after = Number.isFinite(e.retryAfter) && e.retryAfter > 0 ? e.retryAfter : 0;
+    out.classify.push([`${status}|${ra}`, `${e.message}|${e.fatal ? 1 : 0}|${after}`]);
+  }
+}
+for (const status of [200, 206, 416, 301, 404, 429, 500, 503]) {
+  for (const cr of ['', 'bytes 0-0/12345', 'bytes 0-0/*', 'bytes 0-0/0', 'bytes 0-0/99 ', 'garbage/12', 'bytes 0-0/12abc']) {
+    for (const cl of ['', '777', 'abc', '0']) {
+      const h = {};
+      if (cr) { h['content-range'] = cr; }
+      if (cl) { h['content-length'] = cl; }
+      let res;
+      try { const r = interpretProbe(status, h); res = `ok|${r.size}|${r.resumable ? 1 : 0}`; } catch (e) { res = `err|${e.fatal ? 1 : 0}|${e.status}`; }
+      out.probe.push([`${status}|${cr}|${cl}`, res]);
+    }
+  }
+}
+
+// ---- proxy text
+const proxyCases = ['', ' ', '127.0.0.1:8080', 'proxy.local:3128', 'http://u:p@host:8080', 'http://u:p%40x@host:8080', 'http://u%zz:p@host', 'socks5://h:1080', 'socks5h://h', 'socks://h:1', 'socks5://u:p@h', 'socks5://:p@h:9', 'ftp://h:21', 'https://h', 'https://h:444', 'http://', 'host:abc', 'host:99999', 'host:0', '[::1]:8080', 'http://[::1]:8080', 'user:pass@h:1', 'HTTP://UP.com:81', 'socks4://h', ':8080', 'h:80:90', 'http://h/path?x=1', '  http://h:3128  ', 'http://h:80', 'https://h:443', 'a b:80', 'http://:p@h'];
+for (const c of proxyCases) { const ok = setProxy(c); out.proxy.push([hex(c), `${ok ? 1 : 0}|${hex(getProxy())}`]); }
+setProxy('');
+for (const host of ['localhost', 'LOCALHOST', 'localhost.example.com', '127.0.0.1', '127.5.5.5', '127.example.com', '::1', '[::1]', '[::1]x', '1270.0.0.1', 'foo.local', 'FOO.LOCAL', 'example.com', 'my.localhost', 'a.local.b', 'local']) {
+  for (const bl of [true, false]) { setProxy('h:1', { bypassLocal: bl }); out.bypass.push([`${host}|${bl ? 1 : 0}`, bypassProxy(host) ? '1' : '0']); }
 }
 
 const dir = path.join(__dirname, '..', 'vexlo-core', 'tests', 'fixtures');

@@ -1,0 +1,224 @@
+200||	ok|0|0
+200||777	ok|777|0
+200||abc	ok|0|0
+200||0	ok|0|0
+200|bytes 0-0/12345|	ok|0|0
+200|bytes 0-0/12345|777	ok|777|0
+200|bytes 0-0/12345|abc	ok|0|0
+200|bytes 0-0/12345|0	ok|0|0
+200|bytes 0-0/*|	ok|0|0
+200|bytes 0-0/*|777	ok|777|0
+200|bytes 0-0/*|abc	ok|0|0
+200|bytes 0-0/*|0	ok|0|0
+200|bytes 0-0/0|	ok|0|0
+200|bytes 0-0/0|777	ok|777|0
+200|bytes 0-0/0|abc	ok|0|0
+200|bytes 0-0/0|0	ok|0|0
+200|bytes 0-0/99 |	ok|0|0
+200|bytes 0-0/99 |777	ok|777|0
+200|bytes 0-0/99 |abc	ok|0|0
+200|bytes 0-0/99 |0	ok|0|0
+200|garbage/12|	ok|0|0
+200|garbage/12|777	ok|777|0
+200|garbage/12|abc	ok|0|0
+200|garbage/12|0	ok|0|0
+200|bytes 0-0/12abc|	ok|0|0
+200|bytes 0-0/12abc|777	ok|777|0
+200|bytes 0-0/12abc|abc	ok|0|0
+200|bytes 0-0/12abc|0	ok|0|0
+206||	ok|0|0
+206||777	ok|0|0
+206||abc	ok|0|0
+206||0	ok|0|0
+206|bytes 0-0/12345|	ok|12345|1
+206|bytes 0-0/12345|777	ok|12345|1
+206|bytes 0-0/12345|abc	ok|12345|1
+206|bytes 0-0/12345|0	ok|12345|1
+206|bytes 0-0/*|	ok|0|0
+206|bytes 0-0/*|777	ok|0|0
+206|bytes 0-0/*|abc	ok|0|0
+206|bytes 0-0/*|0	ok|0|0
+206|bytes 0-0/0|	ok|0|0
+206|bytes 0-0/0|777	ok|0|0
+206|bytes 0-0/0|abc	ok|0|0
+206|bytes 0-0/0|0	ok|0|0
+206|bytes 0-0/99 |	ok|99|1
+206|bytes 0-0/99 |777	ok|99|1
+206|bytes 0-0/99 |abc	ok|99|1
+206|bytes 0-0/99 |0	ok|99|1
+206|garbage/12|	ok|12|1
+206|garbage/12|777	ok|12|1
+206|garbage/12|abc	ok|12|1
+206|garbage/12|0	ok|12|1
+206|bytes 0-0/12abc|	ok|0|0
+206|bytes 0-0/12abc|777	ok|0|0
+206|bytes 0-0/12abc|abc	ok|0|0
+206|bytes 0-0/12abc|0	ok|0|0
+416||	ok|0|0
+416||777	ok|0|0
+416||abc	ok|0|0
+416||0	ok|0|0
+416|bytes 0-0/12345|	ok|0|0
+416|bytes 0-0/12345|777	ok|0|0
+416|bytes 0-0/12345|abc	ok|0|0
+416|bytes 0-0/12345|0	ok|0|0
+416|bytes 0-0/*|	ok|0|0
+416|bytes 0-0/*|777	ok|0|0
+416|bytes 0-0/*|abc	ok|0|0
+416|bytes 0-0/*|0	ok|0|0
+416|bytes 0-0/0|	ok|0|0
+416|bytes 0-0/0|777	ok|0|0
+416|bytes 0-0/0|abc	ok|0|0
+416|bytes 0-0/0|0	ok|0|0
+416|bytes 0-0/99 |	ok|0|0
+416|bytes 0-0/99 |777	ok|0|0
+416|bytes 0-0/99 |abc	ok|0|0
+416|bytes 0-0/99 |0	ok|0|0
+416|garbage/12|	ok|0|0
+416|garbage/12|777	ok|0|0
+416|garbage/12|abc	ok|0|0
+416|garbage/12|0	ok|0|0
+416|bytes 0-0/12abc|	ok|0|0
+416|bytes 0-0/12abc|777	ok|0|0
+416|bytes 0-0/12abc|abc	ok|0|0
+416|bytes 0-0/12abc|0	ok|0|0
+301||	err|1|301
+301||777	err|1|301
+301||abc	err|1|301
+301||0	err|1|301
+301|bytes 0-0/12345|	err|1|301
+301|bytes 0-0/12345|777	err|1|301
+301|bytes 0-0/12345|abc	err|1|301
+301|bytes 0-0/12345|0	err|1|301
+301|bytes 0-0/*|	err|1|301
+301|bytes 0-0/*|777	err|1|301
+301|bytes 0-0/*|abc	err|1|301
+301|bytes 0-0/*|0	err|1|301
+301|bytes 0-0/0|	err|1|301
+301|bytes 0-0/0|777	err|1|301
+301|bytes 0-0/0|abc	err|1|301
+301|bytes 0-0/0|0	err|1|301
+301|bytes 0-0/99 |	err|1|301
+301|bytes 0-0/99 |777	err|1|301
+301|bytes 0-0/99 |abc	err|1|301
+301|bytes 0-0/99 |0	err|1|301
+301|garbage/12|	err|1|301
+301|garbage/12|777	err|1|301
+301|garbage/12|abc	err|1|301
+301|garbage/12|0	err|1|301
+301|bytes 0-0/12abc|	err|1|301
+301|bytes 0-0/12abc|777	err|1|301
+301|bytes 0-0/12abc|abc	err|1|301
+301|bytes 0-0/12abc|0	err|1|301
+404||	err|1|404
+404||777	err|1|404
+404||abc	err|1|404
+404||0	err|1|404
+404|bytes 0-0/12345|	err|1|404
+404|bytes 0-0/12345|777	err|1|404
+404|bytes 0-0/12345|abc	err|1|404
+404|bytes 0-0/12345|0	err|1|404
+404|bytes 0-0/*|	err|1|404
+404|bytes 0-0/*|777	err|1|404
+404|bytes 0-0/*|abc	err|1|404
+404|bytes 0-0/*|0	err|1|404
+404|bytes 0-0/0|	err|1|404
+404|bytes 0-0/0|777	err|1|404
+404|bytes 0-0/0|abc	err|1|404
+404|bytes 0-0/0|0	err|1|404
+404|bytes 0-0/99 |	err|1|404
+404|bytes 0-0/99 |777	err|1|404
+404|bytes 0-0/99 |abc	err|1|404
+404|bytes 0-0/99 |0	err|1|404
+404|garbage/12|	err|1|404
+404|garbage/12|777	err|1|404
+404|garbage/12|abc	err|1|404
+404|garbage/12|0	err|1|404
+404|bytes 0-0/12abc|	err|1|404
+404|bytes 0-0/12abc|777	err|1|404
+404|bytes 0-0/12abc|abc	err|1|404
+404|bytes 0-0/12abc|0	err|1|404
+429||	err|0|429
+429||777	err|0|429
+429||abc	err|0|429
+429||0	err|0|429
+429|bytes 0-0/12345|	err|0|429
+429|bytes 0-0/12345|777	err|0|429
+429|bytes 0-0/12345|abc	err|0|429
+429|bytes 0-0/12345|0	err|0|429
+429|bytes 0-0/*|	err|0|429
+429|bytes 0-0/*|777	err|0|429
+429|bytes 0-0/*|abc	err|0|429
+429|bytes 0-0/*|0	err|0|429
+429|bytes 0-0/0|	err|0|429
+429|bytes 0-0/0|777	err|0|429
+429|bytes 0-0/0|abc	err|0|429
+429|bytes 0-0/0|0	err|0|429
+429|bytes 0-0/99 |	err|0|429
+429|bytes 0-0/99 |777	err|0|429
+429|bytes 0-0/99 |abc	err|0|429
+429|bytes 0-0/99 |0	err|0|429
+429|garbage/12|	err|0|429
+429|garbage/12|777	err|0|429
+429|garbage/12|abc	err|0|429
+429|garbage/12|0	err|0|429
+429|bytes 0-0/12abc|	err|0|429
+429|bytes 0-0/12abc|777	err|0|429
+429|bytes 0-0/12abc|abc	err|0|429
+429|bytes 0-0/12abc|0	err|0|429
+500||	err|0|500
+500||777	err|0|500
+500||abc	err|0|500
+500||0	err|0|500
+500|bytes 0-0/12345|	err|0|500
+500|bytes 0-0/12345|777	err|0|500
+500|bytes 0-0/12345|abc	err|0|500
+500|bytes 0-0/12345|0	err|0|500
+500|bytes 0-0/*|	err|0|500
+500|bytes 0-0/*|777	err|0|500
+500|bytes 0-0/*|abc	err|0|500
+500|bytes 0-0/*|0	err|0|500
+500|bytes 0-0/0|	err|0|500
+500|bytes 0-0/0|777	err|0|500
+500|bytes 0-0/0|abc	err|0|500
+500|bytes 0-0/0|0	err|0|500
+500|bytes 0-0/99 |	err|0|500
+500|bytes 0-0/99 |777	err|0|500
+500|bytes 0-0/99 |abc	err|0|500
+500|bytes 0-0/99 |0	err|0|500
+500|garbage/12|	err|0|500
+500|garbage/12|777	err|0|500
+500|garbage/12|abc	err|0|500
+500|garbage/12|0	err|0|500
+500|bytes 0-0/12abc|	err|0|500
+500|bytes 0-0/12abc|777	err|0|500
+500|bytes 0-0/12abc|abc	err|0|500
+500|bytes 0-0/12abc|0	err|0|500
+503||	err|0|503
+503||777	err|0|503
+503||abc	err|0|503
+503||0	err|0|503
+503|bytes 0-0/12345|	err|0|503
+503|bytes 0-0/12345|777	err|0|503
+503|bytes 0-0/12345|abc	err|0|503
+503|bytes 0-0/12345|0	err|0|503
+503|bytes 0-0/*|	err|0|503
+503|bytes 0-0/*|777	err|0|503
+503|bytes 0-0/*|abc	err|0|503
+503|bytes 0-0/*|0	err|0|503
+503|bytes 0-0/0|	err|0|503
+503|bytes 0-0/0|777	err|0|503
+503|bytes 0-0/0|abc	err|0|503
+503|bytes 0-0/0|0	err|0|503
+503|bytes 0-0/99 |	err|0|503
+503|bytes 0-0/99 |777	err|0|503
+503|bytes 0-0/99 |abc	err|0|503
+503|bytes 0-0/99 |0	err|0|503
+503|garbage/12|	err|0|503
+503|garbage/12|777	err|0|503
+503|garbage/12|abc	err|0|503
+503|garbage/12|0	err|0|503
+503|bytes 0-0/12abc|	err|0|503
+503|bytes 0-0/12abc|777	err|0|503
+503|bytes 0-0/12abc|abc	err|0|503
+503|bytes 0-0/12abc|0	err|0|503
