@@ -5,3 +5,4 @@ extension-edge/
 *.zip
 .DS_Store
 Thumbs.db
+rust/target/

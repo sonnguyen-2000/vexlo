@@ -1,0 +1,28 @@
+name: rust-core
+# Checks the Rust port (rust/) on every push that touches it. The release workflow is unchanged.
+on:
+  push:
+    paths: ['rust/**', '.github/workflows/rust.yml', 'src/core/util.js', 'src/core/category.js']
+  pull_request:
+    paths: ['rust/**']
+jobs:
+  test:
+    strategy:
+      matrix:
+        os: [windows-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: rust
+      - name: Fixtures are up to date with the JavaScript original
+        if: runner.os == 'Linux'
+        run: node rust/tools/gen-fixtures.js && git diff --exit-code -- rust/vexlo-core/tests/fixtures
+        shell: bash
+      - name: cargo test
+        run: cargo test --manifest-path rust/Cargo.toml
