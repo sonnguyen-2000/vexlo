@@ -13,6 +13,24 @@ const MIN_SEGMENT = 1024 * 1024;   // initial segment size lower bound
 const MAX_RETRIES = 8;
 const IDLE_MS = Number(process.env.VEXLO_IDLE_MS) || 10000; // no data for this long: drop the connection and ask again (a stuck connection often recovers on a new one)
 
+/** Split a file of `size` bytes into at most `connections` equal ranges (each at least MIN_SEGMENT long, apart from a short file). */
+function planSegments(size, connections) {
+  const out = [];
+  const n = Math.max(1, Math.min(connections, Math.ceil(size / MIN_SEGMENT)));
+  const part = Math.floor(size / n);
+  for (let i = 0; i < n; i++) {
+    const start = i * part;
+    const end = i === n - 1 ? size - 1 : start + part - 1;
+    out.push({ start, end, pos: start, done: false });
+  }
+  return out;
+}
+
+/** Wait before retry number `attempt` (1 = first retry); a server's Retry-After wins. */
+function retryDelay(attempt, retryAfter) {
+  return retryAfter || Math.min(15000, 400 * 2 ** (attempt - 1));
+}
+
 /**
  * Probe a URL: size, range support, name and validators.
  * Uses GET with "Range: bytes=0-0" because many servers mishandle HEAD.
@@ -182,15 +200,7 @@ class Download extends EventEmitter {
     s.lastModified = info.lastModified;
     await fsp.mkdir(path.dirname(s.path), { recursive: true });
 
-    if (!s.segments.length && s.resumable && s.size > 0) {
-      const n = Math.max(1, Math.min(s.connections, Math.ceil(s.size / MIN_SEGMENT)));
-      const part = Math.floor(s.size / n);
-      for (let i = 0; i < n; i++) {
-        const start = i * part;
-        const end = i === n - 1 ? s.size - 1 : start + part - 1;
-        s.segments.push({ start, end, pos: start, done: false });
-      }
-    }
+    if (!s.segments.length && s.resumable && s.size > 0) { s.segments = planSegments(s.size, s.connections); }
     // Open for read/write without truncating (resume keeps existing bytes).
     this.fd = await fsp.open(this.partPath, fs.existsSync(this.partPath) ? 'r+' : 'w+');
     if (s.size > 0 && s.resumable) {
@@ -284,7 +294,7 @@ class Download extends EventEmitter {
           throw Object.assign(err, { softLimit: true });
         }
         if (attempt > MAX_RETRIES) { throw err; }
-        const delay = err.retryAfter || Math.min(15000, 400 * 2 ** (attempt - 1));
+        const delay = retryDelay(attempt, err.retryAfter);
         this.emit('warn', `connection ${seg.idx === undefined ? '' : '#' + seg.idx + ' '}attempt ${attempt} failed (${err.code || err.status || err.message}), retry in ${delay} ms`);
         await sleep(delay);
       }
@@ -470,4 +480,4 @@ class Download extends EventEmitter {
   }
 }
 
-module.exports = { Download, probe, MIN_SPLIT };
+module.exports = { Download, probe, MIN_SPLIT, MIN_SEGMENT, planSegments, retryDelay };

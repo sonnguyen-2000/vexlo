@@ -109,3 +109,108 @@ fn unique_path_skips_existing_files_and_parts() {
     assert_eq!(util::unique_path(&dir, "fresh.bin", &HashSet::new()), dir.join("fresh.bin"));
     std::fs::remove_dir_all(&dir).unwrap();
 }
+
+// ---------------------------------------------------------------- download planning and speed
+
+use vexlo_core::meter::SpeedMeter;
+use vexlo_core::segments::{self, Segment};
+
+fn fmt_segs(segs: &[Segment]) -> String {
+    segs.iter().map(|x| format!("{},{},{},{},{}", x.start, x.end, x.pos, x.done as u8, x.running as u8)).collect::<Vec<_>>().join(";")
+}
+
+fn parse_segs(text: &str) -> Vec<Segment> {
+    text.split(';')
+        .filter(|s| !s.is_empty())
+        .map(|s| {
+            let f: Vec<&str> = s.split(',').collect();
+            Segment { start: f[0].parse().unwrap(), end: f[1].parse().unwrap(), pos: f[2].parse().unwrap(), done: f[3] == "1", running: f[4] == "1" }
+        })
+        .collect()
+}
+
+#[test]
+fn segment_plan_matches_js() {
+    let mut bad = vec![];
+    for r in rows("plan") {
+        let f: Vec<i64> = r[0].split(',').map(|x| x.parse().unwrap()).collect();
+        let got = segments::plan_segments(f[0], f[1]).iter().map(|s| format!("{}-{}", s.start, s.end)).collect::<Vec<_>>().join(";");
+        check("plan", &got, &r[1], &r[0], &mut bad);
+    }
+    report(bad);
+}
+
+#[test]
+fn retry_delay_matches_js() {
+    let mut bad = vec![];
+    for r in rows("retry") {
+        let f: Vec<u64> = r[0].split(',').map(|x| x.parse().unwrap()).collect();
+        check("retry", &segments::retry_delay(f[0] as u32, f[1]).to_string(), &r[1], &r[0], &mut bad);
+    }
+    report(bad);
+}
+
+#[test]
+fn scheduler_matches_js() {
+    let mut bad = vec![];
+    for r in rows("sched") {
+        let (max, segtext) = r[0].split_once('|').unwrap();
+        let mut segs = parse_segs(segtext);
+        let mut running = segs.iter().filter(|s| s.running).count();
+        let launched = segments::schedule(&mut segs, &mut running, max.parse().unwrap());
+        let resolved = segments::all_finished(&segs, running);
+        let downloaded = if resolved { segments::recount(&segs) } else { 0 };
+        let got = format!(
+            "{}|{}|{}|{}|{}",
+            launched.iter().map(|i| i.to_string()).collect::<Vec<_>>().join(","),
+            resolved as u8,
+            fmt_segs(&segs),
+            downloaded,
+            running
+        );
+        check("sched", &got, &r[1], &r[0], &mut bad);
+    }
+    report(bad);
+}
+
+#[test]
+fn speed_meter_matches_js() {
+    let mut bad = vec![];
+    for r in rows("meter") {
+        let (win, ops) = r[0].split_once('|').unwrap();
+        let mut m = SpeedMeter::new(win.parse().unwrap());
+        let mut t: i64 = 1_700_000_000_000;
+        let mut res = vec![];
+        for op in ops.split(',') {
+            let f: Vec<&str> = op.split(':').collect();
+            match f[0] {
+                "a" => {
+                    t += f[1].parse::<i64>().unwrap();
+                    m.add(t, f[2].parse().unwrap());
+                }
+                "s" => {
+                    t += f[1].parse::<i64>().unwrap();
+                    res.push(format!("{:x}", m.speed(t).to_bits()));
+                }
+                _ => m.reset(),
+            }
+        }
+        check("meter", &res.join(","), &r[1], &r[0], &mut bad);
+    }
+    report(bad);
+}
+
+#[test]
+fn bucket_waits_for_budget_and_bursts_one_second() {
+    use vexlo_core::meter::Bucket;
+    let mut b = Bucket::new(1000, 0); // 1000 bytes/s, starts with one second of budget
+    assert_eq!(b.try_take(0, 1000), Ok(()));
+    // budget is empty now: 500 bytes need half a second, but a single sleep is capped at 250 ms
+    assert_eq!(b.try_take(0, 500), Err(250));
+    assert_eq!(b.try_take(500, 500), Ok(())); // half a second later 500 bytes are available again
+    let mut off = Bucket::new(0, 0);
+    assert_eq!(off.try_take(0, 1 << 30), Ok(())); // 0 = unlimited
+    b.set_limit(100, 1000);
+    assert_eq!(b.try_take(1000, 100), Ok(()));
+    assert!(matches!(b.try_take(1000, 1), Err(ms) if ms >= 5));
+}

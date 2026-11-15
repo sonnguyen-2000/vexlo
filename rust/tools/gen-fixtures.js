@@ -6,6 +6,8 @@ const fs = require('fs');
 const path = require('path');
 const util = require('../../src/core/util');
 const category = require('../../src/core/category');
+const { Download, planSegments, retryDelay } = require('../../src/core/download');
+const { SpeedMeter } = require('../../src/core/limiter');
 
 const hex = (s) => Buffer.from(String(s), 'utf8').toString('hex');
 let seed = 12345;
@@ -15,7 +17,7 @@ const pick = (a) => a[Math.floor(rnd() * a.length)];
 const POOL = ['a', 'B', 'z', '0', '9', ' ', ' ', '.', '.', '-', '_', '/', '\\', ':', '*', '?', '"', '<', '>', '|', '\t', '\n', 'é', 'ü', 'ệ', 'Ă', '日', '本', '\u00a0', '\u3000', '\ufffd', '\ufeff', '%', '%20', '%C3%A9', '%zz', '%E6%97%A5', ';', '=', "'", 'file', 'CON', 'nul', 'com1', 'LPT9', '.mp4', '.exe', '.zip', 'x'.repeat(40)];
 const randomString = (n) => { let s = ''; const k = 1 + Math.floor(rnd() * n); for (let i = 0; i < k; i++) { s += pick(POOL); } return s; };
 
-const out = { sanitize: [], cd: [], url: [], mime: [], web: [], pick: [], cat: [] };
+const out = { sanitize: [], cd: [], url: [], mime: [], web: [], pick: [], cat: [], plan: [], retry: [], sched: [], meter: [] };
 
 const sanitizeCases = ['', ' ', '...', 'a.b.c', 'CON', 'con.txt', 'com1', 'LPT1.log', 'COM0', 'a'.repeat(300) + '.mp4', '日本語'.repeat(80) + '.zip', 'x'.repeat(179) + '.verylongextension1234567890', 'file name . ', '  .hidden', 'a\u00a0\u00a0b', 'a:b*c?d"e<f>g|h', 'tab\there', '\ufffdabc\ufffd', '😀'.repeat(100) + '.mp4', '..a..', 'name.'];
 for (let i = 0; i < 400; i++) { sanitizeCases.push(randomString(12)); }
@@ -59,6 +61,72 @@ for (const [cd, url, mime, hint] of pickCases) { out.pick.push([hex(cd), hex(url
 const catCases = [['movie.MP4', 'file'], ['song.flac', 'file'], ['setup.exe', 'file'], ['x.zip', 'file'], ['doc.pdf', 'file'], ['noext', 'file'], ['x.unknown', 'file'], ['a.zip', 'hls'], ['a', 'media'], ['a.mp3', 'dash'],
   ['https://e.com/a/b/Setup.EXE?x=1', 'file'], ['https://e.com/a%20b.mkv', 'file'], ['https://e.com/dl', 'file'], ['https://e.com/a.b/c', 'file'], ['.hidden', 'file'], ['a.tar.gz', 'file'], ['dir/file.iso', 'file'], ['HTTP://E.com/X.JAR', 'file']];
 for (const [n, k] of catCases) { out.cat.push([hex(n), hex(k), category.categoryOf(n, k), hex(category.extOf(n))]); }
+
+
+// ---- segment planning, retry delays
+for (const size of [1, 1000, 1048575, 1048576, 1048577, 2097152, 5000000, 123456789, 10 * 2 ** 30 + 7]) {
+  for (const conn of [1, 2, 4, 8, 16, 32]) {
+    const segs = planSegments(size, conn);
+    out.plan.push([`${size},${conn}`, segs.map((x) => `${x.start}-${x.end}`).join(';')]);
+  }
+}
+for (let attempt = 1; attempt <= 12; attempt++) { for (const ra of [0, 1234]) { out.retry.push([`${attempt},${ra}`, String(retryDelay(attempt, ra))]); } }
+
+// ---- the scheduler: which ranges start, how a running range is split
+const fmtSegs = (segs) => segs.map((x) => `${x.start},${x.end},${x.pos},${x.done ? 1 : 0},${x.running ? 1 : 0}`).join(';');
+for (let i = 0; i < 400; i++) {
+  const total = Math.floor(rnd() * 40 * 1024 * 1024) + 1;
+  const n = 1 + Math.floor(rnd() * 8);
+  const part = Math.floor(total / n);
+  const segs = [];
+  let running = 0;
+  for (let k = 0; k < n; k++) {
+    const start = k * part;
+    const end = k === n - 1 ? total - 1 : start + part - 1;
+    const kind = rnd();
+    let pos = start;
+    let done = false;
+    let run = false;
+    if (kind < 0.2) { pos = end + 1; done = true; } else if (kind < 0.35) { pos = start + Math.floor(rnd() * (end - start + 1)); } else if (kind < 0.8) { pos = start + Math.floor(rnd() * (end - start + 1)); run = true; }
+    if (run) { running++; }
+    segs.push({ start, end, pos, done, running: run });
+  }
+  const maxConn = 1 + Math.floor(rnd() * 10);
+  const input = `${maxConn}|${fmtSegs(segs)}`;
+  const dl = new Download(Download.create({ id: 1, url: 'http://x/', dir: '.', connections: maxConn }));
+  dl.state.segments = segs.map((x) => ({ ...x }));
+  dl._maxConn = maxConn;
+  dl._running = running;
+  const launched = [];
+  let resolved = false;
+  dl._launch = (seg) => { seg.running = true; dl._running++; launched.push(dl.state.segments.indexOf(seg)); };
+  dl._segResolve = () => { resolved = true; };
+  dl._schedule();
+  out.sched.push([input, `${launched.join(',')}|${resolved ? 1 : 0}|${fmtSegs(dl.state.segments)}|${dl.state.downloaded}|${dl._running}`]);
+}
+
+// ---- speed meter with a controlled clock
+const realNow = Date.now;
+for (let i = 0; i < 300; i++) {
+  const windowMs = pick([3000, 1000, 500, 10000]);
+  const ops = [];
+  const k = 3 + Math.floor(rnd() * 25);
+  for (let j = 0; j < k; j++) {
+    const r = rnd();
+    if (r < 0.55) { ops.push(`a:${Math.floor(rnd() * 900)}:${Math.floor(rnd() * 5_000_000)}`); } else if (r < 0.95) { ops.push(`s:${Math.floor(rnd() * 2500)}`); } else { ops.push('r'); }
+  }
+  let t = 1_700_000_000_000;
+  Date.now = () => t;
+  const m = new SpeedMeter(windowMs);
+  const res = [];
+  const buf = new DataView(new ArrayBuffer(8));
+  for (const op of ops) {
+    const f = op.split(':');
+    if (f[0] === 'a') { t += Number(f[1]); m.add(Number(f[2])); } else if (f[0] === 's') { t += Number(f[1]); buf.setFloat64(0, m.speed); res.push(buf.getBigUint64(0).toString(16)); } else { m.reset(); }
+  }
+  Date.now = realNow;
+  out.meter.push([`${windowMs}|${ops.join(',')}`, res.join(',')]);
+}
 
 const dir = path.join(__dirname, '..', 'vexlo-core', 'tests', 'fixtures');
 fs.mkdirSync(dir, { recursive: true });
