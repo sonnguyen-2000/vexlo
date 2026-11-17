@@ -1309,9 +1309,36 @@ async function checkUpdateNow() {
   if (!app.isPackaged) { setUpd({ state: 'dev', message: '' }); return updStatus; }
   try {
     const u = getUpdater();
-    const r = await u.checkForUpdates();
+    // The updater has no deadline of its own: a stalled connection (or an earlier check that never ended) would leave "checking" forever.
+    let timer;
+    const deadline = new Promise((_, no) => { timer = setTimeout(() => no(new Error('timeout')), 40000); });
+    let r;
+    try { r = await Promise.race([u.checkForUpdates(), deadline]); } finally { clearTimeout(timer); }
     if (r && r.updateInfo && updStatus.state === 'checking') { setUpd({ state: 'latest', version: r.updateInfo.version }); }
-  } catch (e) { setUpd({ state: 'error', message: String(e && e.message || e).split('\n')[0] }); }
+  } catch (e) {
+    const raw = String(e && e.message || e).split('\n')[0];
+    updLog('check failed: ' + raw);
+    let message = raw;
+    if (raw === 'timeout') {
+      // say what is wrong: ask GitHub directly whether it answers and which version is newest
+      try {
+        const ctl = new AbortController();
+        const t = setTimeout(() => ctl.abort(), 15000);
+        const res = await fetch('https://api.github.com/repos/sonnguyen-2000/vexlo/releases/latest', { signal: ctl.signal, headers: { 'user-agent': 'Vexlo' } });
+        clearTimeout(t);
+        const j = await res.json();
+        const latest = String(j.tag_name || '').replace(/^v/, '');
+        updLog('github says latest ' + latest + ' (status ' + res.status + ')');
+        message = latest && latest !== VERSION
+          ? `Có bản ${latest} trên GitHub nhưng không tải được thông tin cập nhật. Tải bản cài mới từ trang Releases của dự án.`
+          : 'Quá thời gian chờ khi kiểm tra cập nhật. Thử lại sau.';
+      } catch (e2) {
+        updLog('github unreachable: ' + String(e2 && e2.message || e2));
+        message = 'Không kết nối được GitHub (mạng, proxy hoặc tường lửa). Thử lại sau.';
+      }
+    }
+    setUpd({ state: 'error', message });
+  }
   return updStatus;
 }
 
