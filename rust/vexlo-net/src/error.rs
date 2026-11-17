@@ -76,3 +76,10 @@ impl From<reqwest::Error> for NetError {
         NetError::Transport { code: code.to_string(), message: e.to_string() }
     }
 }
+
+impl From<std::io::Error> for NetError {
+    /// A disk problem (no space, no permission...): retrying the download will not fix it.
+    fn from(e: std::io::Error) -> Self {
+        NetError::Fatal(e.to_string())
+    }
+}
