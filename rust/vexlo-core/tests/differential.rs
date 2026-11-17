@@ -286,3 +286,110 @@ fn proxy_details_are_parsed() {
     assert!(!p.socks && !p.https && p.port == 3128 && p.user.is_empty());
     assert_eq!(proxy::parse_proxy("https://h").unwrap().port, 443);
 }
+
+#[test]
+fn url_join_matches_js() {
+    let mut bad = vec![];
+    for r in rows("urljoin") {
+        let (rel, base, want) = (unhex(&r[0]), unhex(&r[1]), unhex(&r[2]));
+        let got = match vexlo_core::urljoin::resolve(&rel, &base) { Ok(s) => s, Err(_) => "ERR".to_string() };
+        check("urljoin", &got, &want, &format!("{:?} against {:?}", rel, base), &mut bad);
+    }
+    report(bad);
+}
+
+fn bits(x: f64) -> String { format!("{:016x}", x.to_bits()) }
+fn hx(s: &str) -> String { s.bytes().map(|b| format!("{:02x}", b)).collect() }
+fn rg(r: &Option<vexlo_core::hls::ByteRange>) -> String { match r { Some(r) => format!("{}-{}", r.start, r.end), None => "-".into() } }
+
+fn dump_hls(p: &vexlo_core::hls::Playlist) -> String {
+    use vexlo_core::hls::Playlist;
+    match p {
+        Playlist::Master { variants, audios } => {
+            let v: Vec<String> = variants.iter().map(|v| format!("V|{}|{}|{}|{}|{}|{}|{}", hx(&v.url), bits(v.bandwidth), bits(v.peak), bits(v.width), bits(v.height), hx(&v.codecs), hx(&v.audio))).collect();
+            let a: Vec<String> = audios.iter().map(|a| format!("A|{}|{}|{}|{}|{}", hx(&a.group), hx(&a.name), hx(&a.lang), if a.def { 1 } else { 0 }, hx(&a.url))).collect();
+            format!("master;{};{}", v.join(";"), a.join(";"))
+        }
+        Playlist::Media(m) => {
+            let key = |k: &Option<vexlo_core::hls::Key>| match k {
+                Some(k) => format!("{}@{}", hx(&k.uri), match &k.iv { Some(iv) => iv.iter().map(|b| format!("{:02x}", b)).collect::<String>(), None => "~".into() }),
+                None => "-".into(),
+            };
+            let map = match &m.map { Some(x) => format!("{}@{}", hx(&x.url), rg(&x.range)), None => "-".into() };
+            let head = format!("media|{}|{}|{}|{}|{}|{}", m.media_sequence, if m.endlist { 1 } else { 0 }, bits(m.target_duration), hx(&m.unsupported), bits(m.total_duration), map);
+            let segs: Vec<String> = m.segments.iter().map(|s| format!("S|{}|{}|{}|{}|{}|{}", hx(&s.url), bits(s.duration), rg(&s.range), key(&s.key), s.seq, if s.discontinuity { 1 } else { 0 })).collect();
+            format!("{};{}", head, segs.join(";"))
+        }
+    }
+}
+
+#[test]
+fn hls_parse_matches_js() {
+    let mut bad = vec![];
+    for r in rows("hls") {
+        let text = unhex(&r[0]);
+        let got = match vexlo_core::hls::parse_m3u8(&text, "https://cdn.example.com/v/hls/index.m3u8?sig=1") { Ok(p) => dump_hls(&p), Err(_) => "ERR".to_string() };
+        check("hls", &got, &r[1], &text, &mut bad);
+    }
+    report(bad);
+}
+
+#[test]
+fn pick_variant_matches_js() {
+    use vexlo_core::hls::{pick_variant, Variant};
+    let v = |bw: f64, h: f64| Variant { url: String::new(), bandwidth: bw, peak: 0.0, width: 0.0, height: h, codecs: String::new(), audio: String::new() };
+    let sets: Vec<Vec<Variant>> = vec![
+        vec![v(100.0, 360.0), v(300.0, 720.0), v(200.0, 720.0), v(50.0, 0.0), v(900.0, 1080.0)],
+        vec![v(5.0, 0.0), v(9.0, 0.0)],
+        vec![v(5.0, 480.0)],
+        vec![v(5.0, 480.0), v(5.0, 480.0), v(5.0, 240.0)],
+    ];
+    let mut bad = vec![];
+    for r in rows("variant") {
+        if r[0] == "empty|best" {
+            check("variant", &pick_variant(&[], "best").map(|_| "0".to_string()).unwrap_or("-1".into()), &r[1], &r[0], &mut bad);
+            continue;
+        }
+        let (i, q) = r[0].split_once('|').unwrap();
+        let got = pick_variant(&sets[i.parse::<usize>().unwrap()], q).map(|x| x.to_string()).unwrap_or("-1".into());
+        check("variant", &got, &r[1], &r[0], &mut bad);
+    }
+    report(bad);
+}
+
+fn dump_mpd(m: &vexlo_core::dash::Mpd) -> String {
+    use vexlo_core::dash::Rep;
+    let rg = |r: &Option<vexlo_core::dash::Range>| match r { Some(r) => format!("{}-{}", r.start, r.end), None => "-".into() };
+    let rep = |r: &Rep| {
+        let init = match &r.init { Some(i) => format!("{}@{}", hx(&i.url), rg(&i.range)), None => "-".into() };
+        let segs = match &r.segments { Some(v) => v.iter().map(|s| format!("{}:{}:{}", hx(&s.url), bits(s.duration), rg(&s.range))).collect::<Vec<_>>().join(","), None => "-".into() };
+        format!("R|{}|{}|{}|{}|{}|{}|{}|{}|{}|{}|{}", hx(&r.id), bits(r.bandwidth), bits(r.width), bits(r.height), hx(&r.codecs), hx(&r.mime), r.kind, hx(&r.lang),
+            r.single.as_ref().map(|s| hx(s)).unwrap_or("-".into()), init, segs)
+    };
+    let mut parts = vec![bits(m.duration), if m.protection { "1".into() } else { "0".into() }, "V".into()];
+    parts.extend(m.video.iter().map(&rep));
+    parts.push("A".into());
+    parts.extend(m.audio.iter().map(&rep));
+    parts.join(";")
+}
+
+#[test]
+fn dash_parse_matches_js() {
+    let mut bad = vec![];
+    for r in rows("dash") {
+        let text = unhex(&r[0]);
+        let got = match vexlo_core::dash::parse_mpd(&text, "https://cdn.example.com/dash/v/manifest.mpd?t=1") { Ok(m) => dump_mpd(&m), Err(_) => "ERR".to_string() };
+        check("dash", &got, &r[1], &text, &mut bad);
+    }
+    report(bad);
+}
+
+#[test]
+fn iso_duration_matches_js() {
+    let mut bad = vec![];
+    for r in rows("dur") {
+        let s = unhex(&r[0]);
+        check("dur", &bits(vexlo_core::dash::parse_duration(&s)), &r[1], &s, &mut bad);
+    }
+    report(bad);
+}

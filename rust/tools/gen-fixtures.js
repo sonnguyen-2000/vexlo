@@ -9,6 +9,8 @@ const category = require('../../src/core/category');
 const { Download, planSegments, retryDelay, interpretProbe } = require('../../src/core/download');
 const { classifyStatus, setProxy, getProxy, bypassProxy } = require('../../src/core/http');
 const { SpeedMeter } = require('../../src/core/limiter');
+const hls = require('../../src/core/hls');
+const dash = require('../../src/core/dash');
 
 const hex = (s) => Buffer.from(String(s), 'utf8').toString('hex');
 let seed = 12345;
@@ -18,7 +20,7 @@ const pick = (a) => a[Math.floor(rnd() * a.length)];
 const POOL = ['a', 'B', 'z', '0', '9', ' ', ' ', '.', '.', '-', '_', '/', '\\', ':', '*', '?', '"', '<', '>', '|', '\t', '\n', 'é', 'ü', 'ệ', 'Ă', '日', '本', '\u00a0', '\u3000', '\ufffd', '\ufeff', '%', '%20', '%C3%A9', '%zz', '%E6%97%A5', ';', '=', "'", 'file', 'CON', 'nul', 'com1', 'LPT9', '.mp4', '.exe', '.zip', 'x'.repeat(40)];
 const randomString = (n) => { let s = ''; const k = 1 + Math.floor(rnd() * n); for (let i = 0; i < k; i++) { s += pick(POOL); } return s; };
 
-const out = { sanitize: [], cd: [], url: [], mime: [], web: [], pick: [], cat: [], plan: [], retry: [], sched: [], meter: [], classify: [], probe: [], proxy: [], bypass: [] };
+const out = { sanitize: [], cd: [], url: [], mime: [], web: [], pick: [], cat: [], plan: [], retry: [], sched: [], meter: [], classify: [], probe: [], proxy: [], bypass: [], urljoin: [], hls: [], variant: [], dash: [], dur: [] };
 
 const sanitizeCases = ['', ' ', '...', 'a.b.c', 'CON', 'con.txt', 'com1', 'LPT1.log', 'COM0', 'a'.repeat(300) + '.mp4', '日本語'.repeat(80) + '.zip', 'x'.repeat(179) + '.verylongextension1234567890', 'file name . ', '  .hidden', 'a\u00a0\u00a0b', 'a:b*c?d"e<f>g|h', 'tab\there', '\ufffdabc\ufffd', '😀'.repeat(100) + '.mp4', '..a..', 'name.'];
 for (let i = 0; i < 400; i++) { sanitizeCases.push(randomString(12)); }
@@ -157,6 +159,89 @@ setProxy('');
 for (const host of ['localhost', 'LOCALHOST', 'localhost.example.com', '127.0.0.1', '127.5.5.5', '127.example.com', '::1', '[::1]', '[::1]x', '1270.0.0.1', 'foo.local', 'FOO.LOCAL', 'example.com', 'my.localhost', 'a.local.b', 'local']) {
   for (const bl of [true, false]) { setProxy('h:1', { bypassLocal: bl }); out.bypass.push([`${host}|${bl ? 1 : 0}`, bypassProxy(host) ? '1' : '0']); }
 }
+
+// ---- URL joining (playlist links)
+const bases = ['https://cdn.example.com/video/hls/index.m3u8', 'http://h.com:8080/a/b/c.m3u8?token=1&x=y#top', 'https://H.Example.COM:443/', 'https://example.com/a/b/', 'http://example.com:80/dir/play list.m3u8', 'https://example.com', 'https://user:pw@example.com/p/q.m3u8'];
+const rels = ['seg1.ts', './seg1.ts', '../seg1.ts', '../../x/seg.ts', '../../../../up.ts', '/abs/seg.ts', '//other.cdn.com/p/s.ts', 'https://abs.example.org/z/s.ts?a=b', 'HTTP://UP.Example.COM:80/Case/Seg.TS', 'seg 1.ts', 'seg.ts?token=a b&c=d', 'seg.ts?x=\'q\'', 'seg.ts#frag ment', '?only=query', '#only', '', 'a/b/../c/./d.ts', 'a/./b/.', 'a/b/..', 'a/%2e%2e/b.ts', 'dir/', 'ü/é.ts', 'seg.ts?q=ü', 'a\\b\\c.ts', 'https://example.com:8443/x', 'http://example.com:0080/x', '  spaced.ts  ', 'seg\n1.ts', 'a%20b.ts', 'a{b}.ts', 'https://example.com', 'https://example.com?x=1', '/', '//x.com', 'data:text/plain,hi', 'blob:https://a/b'];
+for (const b of bases) { for (const r of rels) { let v; try { v = new URL(r, b).toString(); } catch { v = 'ERR'; } out.urljoin.push([hex(r), hex(b), hex(v)]); } }
+
+// ---- HLS playlists
+const f64hex = (x) => { const bf = new DataView(new ArrayBuffer(8)); bf.setFloat64(0, x); return bf.getBigUint64(0).toString(16).padStart(16, '0'); };
+const rg = (r) => (r ? `${r.start}-${r.end}` : '-');
+function dumpHls(r) {
+  if (r.type === 'master') {
+    return 'master;' + r.variants.map((v) => ['V', hex(v.url), f64hex(v.bandwidth), f64hex(v.peak), f64hex(v.width), f64hex(v.height), hex(v.codecs), hex(v.audio)].join('|')).join(';') + ';' +
+      r.audios.map((a) => ['A', hex(a.group || ''), hex(a.name), hex(a.lang), a.def ? 1 : 0, hex(a.url)].join('|')).join(';');
+  }
+  const key = (k) => (k ? `${hex(k.uri)}@${k.iv ? k.iv.toString('hex') : '~'}` : '-');
+  return ['media', r.mediaSequence, r.endlist ? 1 : 0, f64hex(r.targetDuration), hex(r.unsupported), f64hex(r.totalDuration), r.map ? `${hex(r.map.url)}@${rg(r.map.range)}` : '-'].join('|') + ';' +
+    r.segments.map((s) => ['S', hex(s.url), f64hex(s.duration), rg(s.range), key(s.key), s.seq, s.discontinuity ? 1 : 0].join('|')).join(';');
+}
+const hlsBase = 'https://cdn.example.com/v/hls/index.m3u8?sig=1';
+const hlsTexts = [
+  '#EXTM3U\n#EXT-X-VERSION:3\n#EXT-X-TARGETDURATION:10\n#EXT-X-MEDIA-SEQUENCE:7\n#EXTINF:9.009,\nseg7.ts\n#EXTINF:9.009,title\nseg8.ts\n#EXTINF:3.5\n/abs/seg9.ts\n#EXT-X-ENDLIST\n',
+  '#EXTM3U\r\n#EXT-X-TARGETDURATION:6\r\n#EXT-X-DISCONTINUITY\r\n#EXTINF:6,\r\na.ts\r\n#EXTINF:6,\r\nb.ts\r\n',
+  '#EXTM3U\n#EXT-X-KEY:METHOD=AES-128,URI="key.bin",IV=0x00000000000000000000000000000001\n#EXTINF:4,\ns1.ts\n#EXT-X-KEY:METHOD=NONE\n#EXTINF:4,\ns2.ts\n#EXT-X-KEY:METHOD=AES-128,URI="https://k.example.com/k?id=5"\n#EXTINF:4,\ns3.ts\n#EXT-X-ENDLIST',
+  '#EXTM3U\n#EXT-X-KEY:METHOD=SAMPLE-AES,URI="skd://x",KEYFORMAT="com.apple.streamingkeydelivery"\n#EXTINF:4,\ns1.ts',
+  '#EXTM3U\n#EXT-X-KEY:METHOD=AES-256,URI="k"\n#EXTINF:4,\ns1.ts',
+  '#EXTM3U\n#EXT-X-KEY:METHOD=ISO-23001-7,KEYFORMAT="urn:uuid:EDEF8BA9-79D6-4ACE-A3C8-27DCD51D21ED"\n#EXTINF:4,\ns1.ts',
+  '#EXTM3U\n#EXT-X-MAP:URI="init.mp4",BYTERANGE="720@0"\n#EXT-X-BYTERANGE:1000@720\n#EXTINF:4,\nmedia.mp4\n#EXT-X-BYTERANGE:500\n#EXTINF:4,\nmedia.mp4\n#EXT-X-BYTERANGE:bad\n#EXTINF:2,\nmedia.mp4',
+  '#EXTM3U\n#EXT-X-MAP:BYTERANGE="5@1"\n#EXTINF:4,\nx.m4s',
+  '#EXTM3U\n#EXT-X-MEDIA-SEQUENCE:abc\n#EXT-X-TARGETDURATION: 8 \n#EXTINF:,\nx.ts\n#EXTINF:abc\ny.ts\n#EXTINF:5.5e0,z\nz.ts\n#EXTINF:-3,\nw.ts',
+  '#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=800000,AVERAGE-BANDWIDTH=700000,RESOLUTION=640x360,CODECS="avc1.4d401e,mp4a.40.2",AUDIO="aud"\nlow/index.m3u8\n#EXT-X-STREAM-INF:BANDWIDTH=2800000,RESOLUTION=1280x720\n#EXT-X-FOO\nmid/index.m3u8\n#EXT-X-STREAM-INF:BANDWIDTH=5000000,RESOLUTION=1920x1080,FRAME-RATE=30\nhttps://other.example.com/hi.m3u8\n#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="aud",NAME="English",LANGUAGE="en",DEFAULT=YES,URI="audio/en.m3u8"\n#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="aud",NAME="Fr",DEFAULT=NO,URI="audio/fr.m3u8"\n#EXT-X-MEDIA:TYPE=SUBTITLES,GROUP-ID="s",URI="sub.m3u8"\n#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="x"',
+  '#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=1000\n',
+  '#EXTM3U\n#EXT-X-STREAM-INF:RESOLUTION=1920X1080,BANDWIDTH=\nlast.m3u8\n#EXT-X-STREAM-INF:AVERAGE-BANDWIDTH=,BANDWIDTH=77\nb.m3u8',
+  '#EXTM3U', '', 'hello', '\n#EXTM3U\n', '#EXTM3U8\n#EXTINF:1,\nq.ts', '#EXTM3U\n#EXT-X-ENDLIST',
+  '#EXTM3U\n#EXTINF:1,\nhttp://\n', '#EXTM3U\n#EXT-X-KEY:METHOD=AES-128,URI="http://"\n#EXTINF:1,\nq.ts',
+  '#EXTM3U\n#EXT-X-KEY:METHOD=AES-128,URI="k",IV=0XABC\n#EXTINF:1,\nq.ts\n#EXT-X-KEY:METHOD=AES-128,IV=zz\n#EXTINF:1,\nr.ts',
+  '#EXTM3U\n#EXT-X-KEY:METHOD=AES-128\n#EXTINF:1,\nq.ts',
+];
+const hlsPool = ['#EXTM3U', '#EXT-X-VERSION:3', '#EXT-X-TARGETDURATION:10', '#EXT-X-MEDIA-SEQUENCE:3', '#EXTINF:4.2,', '#EXTINF:2', '#EXT-X-ENDLIST', '#EXT-X-DISCONTINUITY', 'a.ts', 'b/c.ts', '../d.ts', '#EXT-X-BYTERANGE:100@0', '#EXT-X-BYTERANGE:50', '#EXT-X-KEY:METHOD=AES-128,URI="k.bin"', '#EXT-X-KEY:METHOD=NONE', '#EXT-X-KEY:METHOD=SAMPLE-AES,URI="x"', '#EXT-X-MAP:URI="i.mp4"', '#COMMENT', '', '  ', '#EXT-X-MEDIA-SEQUENCE:x'];
+for (let i = 0; i < 250; i++) {
+  const n = 1 + Math.floor(rnd() * 12); const lines = ['#EXTM3U'];
+  for (let j = 0; j < n; j++) { lines.push(pick(hlsPool)); }
+  hlsTexts.push(lines.join(rnd() < 0.3 ? '\r\n' : '\n'));
+}
+for (const t of hlsTexts) { let v; try { v = dumpHls(hls.parseM3u8(t, hlsBase)); } catch { v = 'ERR'; } out.hls.push([hex(t), v]); }
+
+// ---- variant choice
+const vs = [
+  [{ url: 'a', bandwidth: 100, height: 360 }, { url: 'b', bandwidth: 300, height: 720 }, { url: 'c', bandwidth: 200, height: 720 }, { url: 'd', bandwidth: 50, height: 0 }, { url: 'e', bandwidth: 900, height: 1080 }],
+  [{ url: 'a', bandwidth: 5, height: 0 }, { url: 'b', bandwidth: 9, height: 0 }],
+  [{ url: 'a', bandwidth: 5, height: 480 }],
+  [{ url: 'a', bandwidth: 5, height: 480 }, { url: 'b', bandwidth: 5, height: 480 }, { url: 'c', bandwidth: 5, height: 240 }],
+];
+for (let vi = 0; vi < vs.length; vi++) {
+  for (const q of ['best', 'worst', '720', '1000', '100', '0', '-5', 'x', '1080', '480', '360']) {
+    const pickd = hls.pickVariant(vs[vi], q);
+    out.variant.push([`${vi}|${q}`, String(vs[vi].indexOf(pickd))]);
+  }
+}
+out.variant.push(['empty|best', String(hls.pickVariant([], 'best') === null ? -1 : 0)]);
+
+// ---- DASH manifests
+const dRg = (r) => (r ? `${r.start}-${r.end}` : '-');
+function dumpMpd(m) {
+  const rep = (r) => ['R', hex(r.id || ''), f64hex(r.bandwidth), f64hex(r.width), f64hex(r.height), hex(r.codecs), hex(r.mime), r.type, hex(r.lang),
+    r.single ? hex(r.single) : '-', r.init ? `${hex(r.init.url)}@${dRg(r.init.range)}` : '-',
+    r.segments ? r.segments.map((s) => `${hex(s.url)}:${f64hex(s.duration)}:${dRg(s.range)}`).join(',') : '-'].join('|');
+  return [f64hex(m.duration), m.protection ? 1 : 0, 'V', ...m.video.map(rep), 'A', ...m.audio.map(rep)].join(';');
+}
+const mpdUrl = 'https://cdn.example.com/dash/v/manifest.mpd?t=1';
+const mpdTexts = [
+  `<?xml version="1.0"?><!-- c --><MPD xmlns="urn:mpeg:dash:schema:mpd:2011" type="static" mediaPresentationDuration="PT1M30.5S"><Period><AdaptationSet mimeType="video/mp4" codecs="avc1.64001f" width="1280" height="720"><SegmentTemplate timescale="90000" duration="360000" initialization="init-$RepresentationID$.mp4" media="seg-$RepresentationID$-$Number%05d$.m4s" startNumber="1"/><Representation id="v720" bandwidth="2500000"/><Representation id="v360" bandwidth="800000" height="360" width="640"/></AdaptationSet><AdaptationSet mimeType="audio/mp4" lang="en"><Representation id="a1" bandwidth="128000" codecs="mp4a.40.2"><SegmentTemplate timescale="48000" duration="192000" initialization="a-init.mp4" media="a-$Number$.m4s"/></Representation></AdaptationSet></Period></MPD>`,
+  `<MPD type="static" mediaPresentationDuration="PT20S"><BaseURL>https://media.example.org/root/</BaseURL><Period duration="PT20S"><BaseURL>p1/</BaseURL><AdaptationSet contentType="video"><SegmentTemplate timescale="1000" media="$RepresentationID$/$Time$.m4s" initialization="$RepresentationID$/i.mp4"><SegmentTimeline><S t="0" d="4000" r="2"/><S d="2000"/><S d="1000" r="1"/></SegmentTimeline></SegmentTemplate><Representation id="x1" bandwidth="1000" width="640" height="360"/></AdaptationSet></Period></MPD>`,
+  `<mpd:MPD xmlns:mpd="urn:mpeg:dash:schema:mpd:2011" mediaPresentationDuration="PT1H2M3S"><mpd:Period><mpd:AdaptationSet mimeType="video/mp4"><mpd:Representation id="1" bandwidth="500" height="480"><mpd:BaseURL>video-480.mp4</mpd:BaseURL><mpd:SegmentBase indexRange="0-800"/></mpd:Representation></mpd:AdaptationSet></mpd:Period></mpd:MPD>`,
+  `<MPD mediaPresentationDuration="PT10S"><Period><AdaptationSet mimeType="video/mp4"><Representation id="l" bandwidth="9" height="240"><SegmentList><Initialization sourceURL="init.mp4" range="0-99"/><SegmentURL media="s1.m4s" mediaRange="100-999"/><SegmentURL media="s2.m4s"/></SegmentList></Representation></AdaptationSet></Period></MPD>`,
+  `<MPD type="dynamic"><Period/></MPD>`, `<MPD><Foo/></MPD>`, `<Other/>`, '', 'garbage', `<MPD mediaPresentationDuration="PT5S"><Period><AdaptationSet mimeType="video/mp4"><SegmentTemplate media="x$Number$.m4s"/><Representation id="a" bandwidth="1"/></AdaptationSet></Period></MPD>`,
+  `<MPD mediaPresentationDuration="PT8S"><Period><AdaptationSet mimeType="video/mp4"><ContentProtection schemeIdUri="urn:uuid:EDEF8BA9-79D6-4ACE-A3C8-27DCD51D21ED"/><ContentProtection schemeIdUri="urn:mpeg:dash:mp4protection:2011" value="cenc"/><SegmentTemplate duration="4" media="s$Number$.m4s" startNumber="0"/><Representation id="r&amp;1" bandwidth="1"/></AdaptationSet></Period></MPD>`,
+  `<MPD mediaPresentationDuration="PT8S"><Period><AdaptationSet mimeType="text/vtt"><Representation id="t"><BaseURL>sub.vtt</BaseURL></Representation></AdaptationSet><AdaptationSet><Representation id="u" mimeType="audio/mp4" bandwidth="5"><BaseURL>a.m4a</BaseURL></Representation><Representation id="n" mimeType="audio/mp4"/></AdaptationSet></Period></MPD>`,
+  `<MPD mediaPresentationDuration="PT8S"><Period><AdaptationSet mimeType="video/mp4"><SegmentTemplate duration="3" timescale="1" media="$$a$Number$$$RepresentationID$.m4s"/><Representation id="r" bandwidth="1"/></AdaptationSet></Period></MPD>`,
+  `<MPD mediaPresentationDuration="PT8S"><Period><AdaptationSet mimeType="video/mp4"><SegmentTemplate duration="3" timescale="1" media="s$Bandwidth%03d$-$Number%02d$-$Time$-$Unknown$.m4s" initialization="i-$Number$-$Time$.mp4"/><Representation id="r" bandwidth="7"/></AdaptationSet></Period></MPD>`,
+  `<MPD><Period><AdaptationSet mimeType='video/mp4'><Representation id='q' bandwidth='1'><BaseURL>  a b.mp4  </BaseURL></Representation></AdaptationSet></Period></MPD>`,
+];
+for (const t of mpdTexts) { let v; try { v = dumpMpd(dash.parseMpd(t, mpdUrl)); } catch { v = 'ERR'; } out.dash.push([hex(t), v]); }
+for (const s of ['PT1M30.5S', 'PT10S', 'P1DT2H', 'P1D', 'PT0S', 'PT', 'P', '', 'abc', 'PT1H', 'PT5M', 'P2DT3H4M5.5S', 'PT1.5S', 'P1DT', 'PT10', '1H', 'pt5s', 'PT1H1H', 'P1M']) { out.dur.push([hex(s), f64hex(dash.parseDuration(s))]); }
 
 const dir = path.join(__dirname, '..', 'vexlo-core', 'tests', 'fixtures');
 fs.mkdirSync(dir, { recursive: true });
