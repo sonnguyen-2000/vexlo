@@ -78,6 +78,7 @@ process.stdin.on('data', async (chunk) => {
     let msg = {};
     try { msg = JSON.parse(buf.subarray(4, 4 + len).toString('utf8')) || {}; } catch { msg = {}; }
     buf = buf.subarray(4 + len);
+    if (msg.cmd === 'log') { log('ext: ' + String(msg.text || '').slice(0, 400)); send({ ok: true }); continue; }
     log('request: ' + (msg.cmd || 'config'));
     try {
       const out = msg.cmd === 'launch' ? await launch(msg.via) : readConfig();

@@ -356,7 +356,11 @@ async function sendMediaItem(tabId, id) {
 const handled = new Set();
 
 // Why a download was or was not taken over is logged to the extension console ("[Vexlo]"), so a missed download can be explained.
-const dbg = (...a) => { try { console.info('[Vexlo]', ...a); } catch { /* no console */ } };
+const dbg = (...a) => {
+  try { console.info('[Vexlo]', ...a); } catch { /* no console */ }
+  // also into the app's native-host.log (shown in the diagnostics export), so a missed download can be explained without the browser console
+  try { browser.runtime.sendNativeMessage('dev.vexlo.host', { cmd: 'log', text: a.map((x) => String(x)).join(' ') }).catch(() => {}); } catch { /* no host */ }
+};
 let lastTakeoverNotice = 0;
 function noticeOnce(message) {
   if (Date.now() - lastTakeoverNotice < 20000) { return; }
@@ -379,8 +383,12 @@ browser.downloads.onCreated.addListener(async (item) => {
     if (excluded(url)) { dbg('download left to the browser: domain is excluded in options', url); return; }
     if (settings.minTakeoverKB > 0 && item.totalBytes > 0 && item.totalBytes < settings.minTakeoverKB * 1024) { dbg('download left to the browser: smaller than the minimum size', url); return; }
     handled.add(item.id);
+    dbg('download seen, taking over:', url);
     try { await browser.downloads.pause(item.id); } catch { /* may already be finishing */ }
-    const st = await appStatus(true);
+    const quick = await pingOnce(800);
+    if (!quick.ok) { notify(t('starting')); dbg('Vexlo is not running, starting it for', url); }
+    const st = quick.ok ? Object.assign({ at: Date.now() }, quick) : await appStatus(true);
+    dbg('app status:', st.ok ? 'ready' : ('not ready ' + (st.reason || '')));
     if (!st.ok) {
       dbg('download left to the browser: Vexlo is not reachable', st.reason || '', url);
       try { await browser.downloads.resume(item.id); } catch { /* ignore */ }
