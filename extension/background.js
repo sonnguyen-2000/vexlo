@@ -101,7 +101,7 @@ function launchApp() {
         if (p.ok || p.reason === 'unauthorized') { return true; }
         // The copy we started may have found the previous one still shutting down and given up: ask again now and then (a second launch just hands over to a running instance).
         if (Date.now() >= nextKick) { nextKick = Date.now() + 15000; browser.runtime.sendNativeMessage('dev.vexlo.host', { cmd: 'launch' }).catch(() => {}); }
-        await new Promise((ok) => setTimeout(ok, 500));
+        await new Promise((ok) => setTimeout(ok, 250));
       }
     } catch { /* host missing: fall back to "app not running" */ }
     return false;
@@ -112,8 +112,9 @@ function launchApp() {
 async function appStatus(force = false) {
   if (!force && Date.now() - aliveCache.at < 3000) { return aliveCache; }
   let r = await pingOnce(1500);
-  if (!r.ok && await pairWithApp()) { r = await pingOnce(1500); } // new code from the app on this PC? try again
-  if (!r.ok && r.reason !== 'unauthorized' && await launchApp()) { r = await pingOnce(3500); } // not running: start it
+  // Not running: start it right away (the launch answer already carries this PC's port and code, so no separate pairing round trip first: each native call starts a helper process).
+  if (!r.ok && r.reason !== 'unauthorized' && await launchApp()) { r = await pingOnce(3500); }
+  if (!r.ok && await pairWithApp()) { r = await pingOnce(1500); } // wrong or new code from the app on this PC? try again
   if (!r.ok) { r = await pingOnce(3500); }
   if (!r.ok) { r = await pingOnce(10000); } // a busy app can need several seconds: do not call it "not running" too early
   aliveCache = { at: Date.now(), ...r };
@@ -358,9 +359,17 @@ const handled = new Set();
 // Why a download was or was not taken over is logged to the extension console ("[Vexlo]"), so a missed download can be explained.
 const dbg = (...a) => {
   try { console.info('[Vexlo]', ...a); } catch { /* no console */ }
-  // also into the app's native-host.log (shown in the diagnostics export), so a missed download can be explained without the browser console
-  try { browser.runtime.sendNativeMessage('dev.vexlo.host', { cmd: 'log', text: a.map((x) => String(x)).join(' ') }).catch(() => {}); } catch { /* no host */ }
+  // also into the app's native-host.log (diagnostics export). Every native message starts a helper process, so lines are collected and sent together, a few seconds later, never while the app is starting.
+  logBuf.push(a.map((x) => String(x)).join(' '));
+  if (!browser.runtime || typeof browser.runtime.sendNativeMessage !== 'function') { logBuf.length = 0; return; }
+  clearTimeout(logTimer);
+  logTimer = setTimeout(() => {
+    const text = logBuf.splice(0).join('\n');
+    try { browser.runtime.sendNativeMessage('dev.vexlo.host', { cmd: 'log', text }).catch(() => {}); } catch { /* no host */ }
+  }, 6000);
 };
+const logBuf = [];
+let logTimer = null;
 let lastTakeoverNotice = 0;
 function noticeOnce(message) {
   if (Date.now() - lastTakeoverNotice < 20000) { return; }
@@ -375,6 +384,7 @@ browser.downloads.onCreated.addListener(async (item) => {
     if (!settings.enabled || !settings.takeover) { dbg('download left to the browser: takeover is off', url); return; }
     if (item.incognito) { dbg('download left to the browser: private window', url); return; }
     if (handled.has(item.id)) { return; }
+    { const until = givenBack.get(url); if (until) { givenBack.delete(url); if (until > Date.now()) { dbg('download left to the browser: restarted after Vexlo was unreachable', url); return; } } }
     // Firefox also reports downloads from earlier sessions (the history) when the extension starts: only take over NEW ones.
     if (item.state && item.state !== 'in_progress') { dbg('download left alone: already finished or stopped (history)', item.state, url); return; }
     const startedAt = Date.parse(item.startTime || '');
@@ -384,14 +394,16 @@ browser.downloads.onCreated.addListener(async (item) => {
     if (settings.minTakeoverKB > 0 && item.totalBytes > 0 && item.totalBytes < settings.minTakeoverKB * 1024) { dbg('download left to the browser: smaller than the minimum size', url); return; }
     handled.add(item.id);
     dbg('download seen, taking over:', url);
-    try { await browser.downloads.pause(item.id); } catch { /* may already be finishing */ }
+    const base = item.filename ? item.filename.split(/[\\/]/).pop() : '';
+    // Stop the browser's own copy at once (like IDM): the app may need many seconds to start, and a half-downloaded file cancelled later is wasted work.
+    await dropBrowserDownload(item.id);
     const quick = await pingOnce(800);
     if (!quick.ok) { notify(t('starting')); dbg('Vexlo is not running, starting it for', url); }
     const st = quick.ok ? Object.assign({ at: Date.now() }, quick) : await appStatus(true);
     dbg('app status:', st.ok ? 'ready' : ('not ready ' + (st.reason || '')));
     if (!st.ok) {
-      dbg('download left to the browser: Vexlo is not reachable', st.reason || '', url);
-      try { await browser.downloads.resume(item.id); } catch { /* ignore */ }
+      dbg('download given back to the browser: Vexlo is not reachable', st.reason || '', url);
+      giveBackToBrowser(url, base);
       noticeOnce(st.reason === 'unauthorized' ? t('errToken') : t('noApp'));
       return;
     }
@@ -404,20 +416,29 @@ browser.downloads.onCreated.addListener(async (item) => {
         if (cookies.length) { headers.cookie = cookies.map((c) => `${c.name}=${c.value}`).join('; '); }
       } catch { /* cookies unavailable */ }
     }
-    const base = item.filename ? item.filename.split(/[\\/]/).pop() : '';
     await sendToApp([{ url, headers, filename: base || undefined, page: item.referrer || '' }], { show: true });
     dbg('download handed to Vexlo', url);
-    try { await browser.downloads.cancel(item.id); } catch { /* ignore */ }
-    // Firefox keeps the half-written "name.part" (and an empty placeholder file) of a cancelled download: remove them too.
-    try { await browser.downloads.removeFile(item.id); } catch { /* nothing to remove, or not supported for unfinished downloads */ }
-    try { await browser.downloads.erase({ id: item.id }); } catch { /* ignore */ }
   } catch (err) {
-    // Anything unexpected: never lose the user's download, but say why the browser kept it.
-    dbg('takeover failed, the browser keeps the download:', err && err.message);
-    try { await browser.downloads.resume(item.id); } catch { /* ignore */ }
+    // Anything unexpected: never lose the user's download. The browser copy is already stopped, so start it again in the browser.
+    dbg('takeover failed, the browser downloads it again:', err && err.message);
+    if (handled.has(item.id)) { giveBackToBrowser(item.finalUrl || item.url, item.filename ? item.filename.split(/[\\/]/).pop() : ''); }
     noticeOnce(err && err.message ? err.message : t('noApp'));
   }
 });
+
+async function dropBrowserDownload(id) {
+  try { await browser.downloads.cancel(id); } catch { /* may already be finishing */ }
+  // Firefox keeps the half-written "name.part" (and an empty placeholder file) of a cancelled download: remove them too.
+  try { await browser.downloads.removeFile(id); } catch { /* nothing to remove, or not supported for unfinished downloads */ }
+  try { await browser.downloads.erase({ id }); } catch { /* ignore */ }
+}
+
+// Links we started again in the browser ourselves (the app could not be reached): not to be taken over a second time.
+const givenBack = new Map();
+function giveBackToBrowser(url, filename) {
+  givenBack.set(url, Date.now() + 60000);
+  browser.downloads.download({ url, filename: filename || undefined, conflictAction: 'uniquify' }).catch((e) => dbg('could not restart in the browser:', e && e.message));
+}
 
 // ---------------------------------------------------------------- context menu
 

@@ -40,7 +40,7 @@ async function startApp({ addImpl } = {}) {
 const extFetch = (url, opts = {}) => fetch(url, { ...opts, headers: { origin: 'moz-extension://test-uuid', ...(opts.headers || {}) } });
 
 async function loadBackground({ port, settings = {}, tabs = {}, cookies = [], native }) {
-  const calls = { pause: [], resume: [], cancel: [], erase: [], badge: [], notify: [], menus: [] };
+  const calls = { pause: [], resume: [], cancel: [], erase: [], download: [], badge: [], notify: [], menus: [] };
   const L = {}; // captured listeners
   const cap = (name) => ({ addListener: (fn) => { L[name] = fn; } });
   const browser = {
@@ -52,7 +52,7 @@ async function loadBackground({ port, settings = {}, tabs = {}, cookies = [], na
     downloads: {
       onCreated: cap('dlCreated'),
       pause: async (id) => { calls.pause.push(id); }, resume: async (id) => { calls.resume.push(id); },
-      cancel: async (id) => { calls.cancel.push(id); }, erase: async (q) => { calls.erase.push(q.id); },
+      cancel: async (id) => { calls.cancel.push(id); }, download: async (o) => { calls.download.push(o.url); return 99; }, erase: async (q) => { calls.erase.push(q.id); },
     },
     cookies: { getAll: async () => cookies },
     contextMenus: { removeAll: async () => {}, create: (o) => { calls.menus.push(o.id); }, onClicked: cap('menu') },
@@ -155,16 +155,15 @@ test('send reports failure when the app is not running', async () => {
   assert.equal(r.ok, false);
 });
 
-test('download takeover: paused, sent with cached cookie+referer, then removed from Firefox', async () => {
+test('download takeover: stopped at once, sent with cached cookie+referer, removed from Firefox', async () => {
   const { api, manager } = await startApp();
   const bg = await loadBackground({ port: api.port, tabs: TAB });
   const url = 'https://files.example/dl/tool.zip?x=1';
   bg.L.beforeSend({ requestId: 'd1', url, requestHeaders: reqHeaders({ cookie: 'auth=zzz', referer: 'https://files.example/page', 'user-agent': 'FF' }) });
   await bg.L.dlCreated({ id: 41, url, finalUrl: url, filename: 'C:\\Users\\me\\Downloads\\tool.zip', referrer: 'https://files.example/page', incognito: false });
-  assert.deepEqual(plain(bg.calls.pause), [41]);
   assert.deepEqual(plain(bg.calls.cancel), [41]);
   assert.deepEqual(plain(bg.calls.erase), [41]);
-  assert.deepEqual(plain(bg.calls.resume), []);
+  assert.deepEqual(plain(bg.calls.download), []);
   assert.equal(manager.added.length, 1);
   assert.equal(manager.added[0].url, url);
   assert.equal(manager.added[0].filename, 'tool.zip');
@@ -181,23 +180,25 @@ test('takeover falls back to the cookie jar when no request headers were capture
   await api.close();
 });
 
-test('takeover: app not running -> Firefox keeps the download (resumed, never cancelled)', async () => {
+test('takeover: app not running -> the browser copy is stopped, then the browser downloads it again (once, not taken over again)', async () => {
   const { api } = await startApp();
   const port = api.port;
   await api.close();
   const bg = await loadBackground({ port, tabs: TAB });
   await bg.L.dlCreated({ id: 3, url: 'https://x.example/f.bin', incognito: false });
-  assert.deepEqual(plain(bg.calls.pause), [3]);
-  assert.deepEqual(plain(bg.calls.resume), [3]);
-  assert.deepEqual(plain(bg.calls.cancel), []);
+  assert.deepEqual(plain(bg.calls.cancel), [3]);
+  assert.deepEqual(plain(bg.calls.download), ['https://x.example/f.bin']);
+  // the restarted download is left alone this time
+  await bg.L.dlCreated({ id: 4, url: 'https://x.example/f.bin', incognito: false });
+  assert.deepEqual(plain(bg.calls.cancel), [3]);
 });
 
-test('takeover: app rejects the request -> download is resumed in Firefox, nothing lost', async () => {
+test('takeover: app rejects the request -> the browser downloads it again, nothing lost', async () => {
   const { api } = await startApp({ addImpl: () => { throw new Error('boom'); } });
   const bg = await loadBackground({ port: api.port, tabs: TAB });
   await bg.L.dlCreated({ id: 8, url: 'https://x.example/f.bin', incognito: false });
-  assert.deepEqual(plain(bg.calls.cancel), []);
-  assert.deepEqual(plain(bg.calls.resume), [8]);
+  assert.deepEqual(plain(bg.calls.cancel), [8]);
+  assert.deepEqual(plain(bg.calls.download), ['https://x.example/f.bin']);
   await api.close();
 });
 
@@ -207,7 +208,7 @@ test('takeover ignores old downloads from the browser history (finished, or star
   await bg.L.dlCreated({ id: 61, url: 'https://x.example/old-installer.exe', state: 'complete', startTime: new Date(Date.now() - 3 * 3600e3).toISOString() });
   await bg.L.dlCreated({ id: 62, url: 'https://x.example/old2.exe', state: 'in_progress', startTime: new Date(Date.now() - 3 * 3600e3).toISOString() });
   assert.equal(manager.added.length, 0);
-  assert.deepEqual(plain(bg.calls.pause), []);
+  assert.deepEqual(plain(bg.calls.cancel), []);
   await bg.L.dlCreated({ id: 63, url: 'https://x.example/new.exe', state: 'in_progress', startTime: new Date().toISOString() });
   assert.equal(manager.added.length, 1);
   await api.close();

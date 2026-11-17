@@ -405,6 +405,7 @@ async function startApi() {
     apiError = e.code === 'EADDRINUSE' ? T('Cổng {port} đang được chương trình khác dùng', { port: settings.port }) : String(e.message || e);
     api = null;
   }
+  slog(api ? `api listening on ${settings.port}` : 'api not listening: ' + apiError);
   broadcast('app:status', appInfo());
 }
 
