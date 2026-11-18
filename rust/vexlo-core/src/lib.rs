@@ -10,3 +10,4 @@ pub mod segments;
 pub mod hls;
 pub mod urljoin;
 pub mod util;
+pub mod ytdlp;

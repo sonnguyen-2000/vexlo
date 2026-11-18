@@ -11,6 +11,7 @@ const { classifyStatus, setProxy, getProxy, bypassProxy } = require('../../src/c
 const { SpeedMeter } = require('../../src/core/limiter');
 const hls = require('../../src/core/hls');
 const dash = require('../../src/core/dash');
+const ytdlp = require('../../src/core/ytdlp');
 
 const hex = (s) => Buffer.from(String(s), 'utf8').toString('hex');
 let seed = 12345;
@@ -20,7 +21,7 @@ const pick = (a) => a[Math.floor(rnd() * a.length)];
 const POOL = ['a', 'B', 'z', '0', '9', ' ', ' ', '.', '.', '-', '_', '/', '\\', ':', '*', '?', '"', '<', '>', '|', '\t', '\n', 'é', 'ü', 'ệ', 'Ă', '日', '本', '\u00a0', '\u3000', '\ufffd', '\ufeff', '%', '%20', '%C3%A9', '%zz', '%E6%97%A5', ';', '=', "'", 'file', 'CON', 'nul', 'com1', 'LPT9', '.mp4', '.exe', '.zip', 'x'.repeat(40)];
 const randomString = (n) => { let s = ''; const k = 1 + Math.floor(rnd() * n); for (let i = 0; i < k; i++) { s += pick(POOL); } return s; };
 
-const out = { sanitize: [], cd: [], url: [], mime: [], web: [], pick: [], cat: [], plan: [], retry: [], sched: [], meter: [], classify: [], probe: [], proxy: [], bypass: [], urljoin: [], hls: [], variant: [], dash: [], dur: [] };
+const out = { sanitize: [], cd: [], url: [], mime: [], web: [], pick: [], cat: [], plan: [], retry: [], sched: [], meter: [], classify: [], probe: [], proxy: [], bypass: [], urljoin: [], hls: [], variant: [], dash: [], dur: [], ytmedia: [], ytfmt: [], ytprog: [], yterr: [] };
 
 const sanitizeCases = ['', ' ', '...', 'a.b.c', 'CON', 'con.txt', 'com1', 'LPT1.log', 'COM0', 'a'.repeat(300) + '.mp4', '日本語'.repeat(80) + '.zip', 'x'.repeat(179) + '.verylongextension1234567890', 'file name . ', '  .hidden', 'a\u00a0\u00a0b', 'a:b*c?d"e<f>g|h', 'tab\there', '\ufffdabc\ufffd', '😀'.repeat(100) + '.mp4', '..a..', 'name.'];
 for (let i = 0; i < 400; i++) { sanitizeCases.push(randomString(12)); }
@@ -242,6 +243,20 @@ const mpdTexts = [
 ];
 for (const t of mpdTexts) { let v; try { v = dumpMpd(dash.parseMpd(t, mpdUrl)); } catch { v = 'ERR'; } out.dash.push([hex(t), v]); }
 for (const s of ['PT1M30.5S', 'PT10S', 'P1DT2H', 'P1D', 'PT0S', 'PT', 'P', '', 'abc', 'PT1H', 'PT5M', 'P2DT3H4M5.5S', 'PT1.5S', 'P1DT', 'PT10', '1H', 'pt5s', 'PT1H1H', 'P1M']) { out.dur.push([hex(s), f64hex(dash.parseDuration(s))]); }
+
+// ---- yt-dlp helpers
+const ytUrls = ['https://www.youtube.com/watch?v=abc', 'https://youtube.com/watch', 'https://m.youtube.com/shorts/xyz', 'https://youtube.com/live/abc', 'https://www.youtube.com/embed/abc', 'https://www.youtube.com/', 'https://www.youtube.com/@chan', 'https://youtube.com/watchlist', 'https://www.youtube-nocookie.com/embed/q', 'https://notyoutube.com/watch?v=1', 'https://youtube.com.evil.com/watch', 'https://youtu.be/abc', 'https://youtu.be/', 'https://youtu.be',
+  'https://www.tiktok.com/@u/video/123', 'https://www.tiktok.com/@u/video/abc', 'https://vm.tiktok.com/xyz/', 'https://vt.tiktok.com/abc', 'https://www.tiktok.com/t/ZT123/', 'https://www.tiktok.com/@u/photo/55', 'https://www.tiktok.com/', 'https://tiktok.com/v/1',
+  'https://www.facebook.com/watch?v=1', 'https://www.facebook.com/reel/123', 'https://www.facebook.com/reels/123', 'https://www.facebook.com/share/v/abc/', 'https://www.facebook.com/share/r/abc', 'https://www.facebook.com/user/videos/123', 'https://www.facebook.com/user/videos/abc', 'https://www.facebook.com/video.php?v=1', 'https://www.facebook.com/videoXphp', 'https://www.facebook.com/user/posts/123?v=5', 'https://www.facebook.com/user/posts/123', 'https://www.facebook.com/user/permalink/1?x=1&v=2', 'https://fb.watch/abc/', 'https://fb.watch/', 'https://www.facebook.com/',
+  'https://www.instagram.com/reel/abc/', 'https://www.instagram.com/p/abc', 'https://www.instagram.com/tv/abc', 'https://www.instagram.com/reels/abc', 'https://www.instagram.com/user/', 'https://instagram.com/p/',
+  'https://example.com/video.mp4', 'ftp://youtube.com/watch', 'not a url', '', 'HTTPS://WWW.YOUTUBE.COM/watch?v=1', 'https://www.youtube.com:443/watch', 'javascript:alert(1)', 'https://www.youtube.com/%77atch', 'https://www.youtube.com/a/../watch'];
+for (const u of ytUrls) { out.ytmedia.push([hex(u), ytdlp.isMediaUrl(u) ? '1' : '0']); }
+for (const q of ['best', 'audio', 'worst', '720', '1080', '0', '-1', 'x', '', '144', '4320', '720.5', ' 480 ']) { const r = ytdlp.formatSelector(q); out.ytfmt.push([hex(q), `${hex(r.fmt)}|${r.audio ? 1 : 0}`]); }
+const progCases = ['VXP|100|1000|2000|50.5|12', 'VXP|100|NA|2000|50.5|12', 'VXP|100|0|2000|NA|NA', 'VXP|||||', 'VXP|1|2|3|4', 'VXP|1|2|3', 'VXP|1|2|3|4|5|6', '  VXP|1|2|3|4|5  \n', 'xVXP|1|2|3|4|5', 'vxp|1|2|3|4|5', 'VXP| 7 | 8 | 9 | 10 | 11 ', 'VXP|-5|-6|-7|-8|-9', 'VXP|1e3|2.5e2|0|1|1', 'VXP|abc|def|ghi|jkl|mno', 'VXP|Infinity|1|1|1|1', 'VXP|0|0|500|1|1', '', 'something else'];
+for (const c of progCases) { const r = ytdlp.parseProgress(c); out.ytprog.push([hex(c), r ? [r.done, r.total, r.speed, r.eta].map(f64hex).join('|') : '-']); }
+const errFrags = ['ERROR: [youtube] abc123: Sign in to confirm you’re not a bot', 'ERROR: [youtube] abc: Sign in to confirm youre not a bot', 'Use --cookies-from-browser', 'cookies are required for this', 'cookies\nrequired', 'Private video. Sign in', 'This video is private', 'Video unavailable', 'ERROR: [TikTok] 77: Unsupported URL: https://x', 'HTTP Error 429: Too Many Requests', 'rate-limited', 'rate limit', 'ffmpeg not found', 'ffprobe and ffmpeg are fine', 'No space left on device', 'Unable to extract nsig', 'HTTP Error 403: Forbidden', 'getaddrinfo failed', 'Connection reset by peer', 'connection refused', 'The account associated with this video has been terminated', 'account x terminated', 'Requested format is not available', 'ERROR: [generic] Something odd: details here', 'plain text line', '  ', '', 'Log in to continue', 'you must be 18', 'Members-only content', 'ERROR: first\nERROR: [x] y: second', 'WARNING: x\nlast line', 'error: lower case', 'x'.repeat(300), 'ERROR: [a:b] id-1_x:   spaced', 'ERROR: [] not tag: x', 'ERROR: é [bad tag'];
+for (const f of errFrags) { const r = ytdlp.friendlyError(f); out.yterr.push([hex(f), `${r.code}|${hex(r.message)}`]); }
+for (let i = 0; i < 300; i++) { const n = 1 + Math.floor(rnd() * 4); let t = ''; for (let j = 0; j < n; j++) { t += pick(errFrags) + pick(['\n', ' ', '', '\r\n']); } const r = ytdlp.friendlyError(t); out.yterr.push([hex(t), `${r.code}|${hex(r.message)}`]); }
 
 const dir = path.join(__dirname, '..', 'vexlo-core', 'tests', 'fixtures');
 fs.mkdirSync(dir, { recursive: true });

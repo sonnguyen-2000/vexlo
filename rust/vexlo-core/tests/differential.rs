@@ -393,3 +393,46 @@ fn iso_duration_matches_js() {
     }
     report(bad);
 }
+
+#[test]
+fn media_url_matches_js() {
+    let mut bad = vec![];
+    for r in rows("ytmedia") {
+        let u = unhex(&r[0]);
+        check("ytmedia", if vexlo_core::ytdlp::is_media_url(&u) { "1" } else { "0" }, &r[1], &u, &mut bad);
+    }
+    report(bad);
+}
+
+#[test]
+fn format_selector_matches_js() {
+    let mut bad = vec![];
+    for r in rows("ytfmt") {
+        let q = unhex(&r[0]);
+        let (f, a) = vexlo_core::ytdlp::format_selector(&q);
+        check("ytfmt", &format!("{}|{}", hx(&f), if a { 1 } else { 0 }), &r[1], &q, &mut bad);
+    }
+    report(bad);
+}
+
+#[test]
+fn progress_line_matches_js() {
+    let mut bad = vec![];
+    for r in rows("ytprog") {
+        let l = unhex(&r[0]);
+        let got = match vexlo_core::ytdlp::parse_progress(&l) { Some(p) => [p.done, p.total, p.speed, p.eta].iter().map(|x| bits(*x)).collect::<Vec<_>>().join("|"), None => "-".into() };
+        check("ytprog", &got, &r[1], &l, &mut bad);
+    }
+    report(bad);
+}
+
+#[test]
+fn friendly_error_matches_js() {
+    let mut bad = vec![];
+    for r in rows("yterr") {
+        let t = unhex(&r[0]);
+        let e = vexlo_core::ytdlp::friendly_error(&t);
+        check("yterr", &format!("{}|{}", e.code, hx(&e.message)), &r[1], &t, &mut bad);
+    }
+    report(bad);
+}

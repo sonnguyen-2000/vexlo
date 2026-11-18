@@ -200,3 +200,15 @@ fn resolve_relative(rel: &str, b: &Parts) -> Result<String, String> {
     p.fragment = fragment;
     Ok(serialize(&p))
 }
+
+/// (scheme, hostname, pathname, search) of an absolute http(s) URL, as `new URL(u)` reports them; `None` where that throws or the scheme is another one.
+pub fn http_parts(url: &str) -> Option<(String, String, String, String)> {
+    let u = clean_input(url);
+    let (sc, rest) = scheme_of(&u)?;
+    let sc = sc.to_ascii_lowercase();
+    if !is_special(&sc) { return None; }
+    let p = parse_absolute(&sc, rest).ok()?;
+    let path = encode(&normalize_path(&if p.path.is_empty() { "/".to_string() } else { p.path.clone() }), in_path);
+    let search = match &p.query { Some(q) if !q.is_empty() => format!("?{}", encode(q, in_query)), _ => String::new() };
+    Some((sc, p.host, path, search))
+}
