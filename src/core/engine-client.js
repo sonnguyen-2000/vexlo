@@ -8,8 +8,8 @@ const { detectKind } = require('./manager');
 
 const WORKER = path.join(__dirname, 'worker.js');
 
-function spawnWorker() {
-  if (process.versions && process.versions.electron) {
+function spawnWorker(forceFork = false) {
+  if (!forceFork && process.versions && process.versions.electron) {
     try {
       const { utilityProcess } = require('electron');
       if (utilityProcess) {
@@ -24,7 +24,7 @@ function spawnWorker() {
       }
     } catch { /* fall through to fork */ }
   }
-  const child = require('child_process').fork(WORKER, [], { stdio: ['ignore', 'inherit', 'inherit', 'ipc'] });
+  const child = require('child_process').fork(WORKER, [], { stdio: ['ignore', 'inherit', 'inherit', 'ipc'], env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' } });
   return {
     post: (m) => { if (child.connected) { child.send(m); } },
     onMessage: (fn) => child.on('message', fn),
@@ -51,7 +51,7 @@ class EngineClient extends EventEmitter {
   }
 
   _start() {
-    this._w = spawnWorker();
+    this._w = spawnWorker(this._useFork);
     const me = this._w;
     me.gotReady = false;
     me.onMessage((msg) => { if (this._w === me) { this._onMessage(msg); } });
@@ -74,7 +74,8 @@ class EngineClient extends EventEmitter {
       tries++;
       if (tries <= 3) { sendInit(); return; }
       clearInterval(dog);
-      this.emit('warn', 'engine did not start, restarting it');
+      this.emit('warn', 'engine did not start, restarting it as a plain child process');
+      this._useFork = true; // the Electron utility process would not come up on this PC: use an ordinary child process instead
       try { me.kill(); } catch { /* already gone */ }
     }, 3000);
   }
