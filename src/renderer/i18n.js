@@ -215,8 +215,28 @@
     'Tệp "{f}" đã có trong thư mục này. Bản mới sẽ được lưu thành "{alt}".': 'The file "{f}" already exists in this folder. The new one will be saved as "{alt}".',
     'Đã có trong danh sách tải: {f}': 'Already in the download list: {f}', 'Không tìm thấy tệp (có thể đã bị xóa hoặc di chuyển)': 'File not found (it may have been deleted or moved)',
     'Lịch tải: bắt đầu': 'Schedule: started', 'Đang tải {n} tệp đã hẹn.': 'Downloading {n} scheduled files.', 'Không có tệp nào đang chờ.': 'No files are waiting.',
+    // ---- found by the coverage test (test/i18n.test.js): close buttons, update check, errors from the engine
+    'Đóng': 'Close', 'File nén': 'Archive', '0 đang tải': '0 active', '0 tệp': '0 files',
+    'Máy chủ trả về một trang web thay vì file (link có thể đã hết hạn hoặc cần đăng nhập)': 'The server returned a web page instead of the file (the link may have expired or needs a login)',
+    'Quá thời gian chờ khi kiểm tra cập nhật. Thử lại sau.': 'Timed out while checking for updates. Try again later.',
+    'Không kết nối được GitHub (mạng, proxy hoặc tường lửa). Thử lại sau.': 'Cannot reach GitHub (network, proxy or firewall). Try again later.',
+    'Có bản {v} trên GitHub nhưng không tải được thông tin cập nhật. Tải bản cài mới từ trang Releases của dự án.': 'Version {v} is on GitHub, but its update information could not be loaded. Download the new installer from the project\'s Releases page.',
+    'Proxy SOCKS: kết nối bị đóng': 'SOCKS proxy: connection closed', 'Proxy SOCKS: không phải SOCKS5': 'SOCKS proxy: not a SOCKS5 server',
+    'Proxy SOCKS yêu cầu đăng nhập': 'The SOCKS proxy requires a login', 'Proxy SOCKS: không có kiểu xác thực phù hợp': 'SOCKS proxy: no matching authentication method',
+    'Proxy SOCKS: sai tên hoặc mật khẩu': 'SOCKS proxy: wrong user name or password', 'Proxy SOCKS: lỗi chung': 'SOCKS proxy: general failure',
+    'Proxy SOCKS: bị cấm': 'SOCKS proxy: connection not allowed', 'Proxy SOCKS: mạng không tới được': 'SOCKS proxy: network unreachable',
+    'Proxy SOCKS: máy đích không tới được': 'SOCKS proxy: host unreachable', 'Proxy SOCKS: đích từ chối kết nối': 'SOCKS proxy: connection refused by the target',
+    'Proxy SOCKS: TTL hết hạn': 'SOCKS proxy: TTL expired', 'Proxy SOCKS: lệnh không hỗ trợ': 'SOCKS proxy: command not supported',
+    'Proxy SOCKS: kiểu địa chỉ không hỗ trợ': 'SOCKS proxy: address type not supported',
+    'Không tải được yt-dlp từ GitHub': 'Could not download yt-dlp from GitHub', 'tải chưa đủ': 'download incomplete', 'tệp tải về không chạy được': 'the downloaded file does not run',
     'Lịch tải: đã dừng': 'Schedule: stopped', 'Các tệp đang tải được tạm dừng theo giờ đã hẹn.': 'Running downloads were paused at the scheduled time.',
   };
+
+  // messages with a value in the middle (the engine stores them in Vietnamese)
+  const PATTERNS = [
+    [/^Kiểu mã hóa (.+) chưa được hỗ trợ$/, 'Encryption type $1 is not supported'],
+    [/^Proxy SOCKS: lỗi (\d+)$/, 'SOCKS proxy: error $1'],
+  ];
 
   let lang = 'vi';
   function setLang(l) { lang = l === 'en' ? 'en' : 'vi'; }
@@ -226,7 +246,11 @@
     if (Object.prototype.hasOwnProperty.call(EN, key)) { return EN[key]; }
     // "Message: detail" (e.g. engine errors carrying a URL or a code): translate the head only.
     const i = String(key).indexOf(': ');
-    if (i > 0) { const h = key.slice(0, i); if (Object.prototype.hasOwnProperty.call(EN, h)) { return EN[h] + key.slice(i); } }
+    if (i > 0) {
+      const h = key.slice(0, i); const tail = key.slice(i + 2);
+      if (Object.prototype.hasOwnProperty.call(EN, h)) { return EN[h] + ': ' + (Object.prototype.hasOwnProperty.call(EN, tail) ? EN[tail] : tail); }
+    }
+    for (const [re, to] of PATTERNS) { const m = re.exec(key); if (m) { return to.replace(/\$(\d)/g, (x, n) => m[n]); } }
     return key;
   }
   function tr(key, vars) { return fill(lang === 'en' ? lookup(key) : key, vars); }

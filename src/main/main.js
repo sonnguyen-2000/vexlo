@@ -1331,11 +1331,11 @@ async function checkUpdateNow() {
         const latest = String(j.tag_name || '').replace(/^v/, '');
         updLog('github says latest ' + latest + ' (status ' + res.status + ')');
         message = latest && latest !== VERSION
-          ? `Có bản ${latest} trên GitHub nhưng không tải được thông tin cập nhật. Tải bản cài mới từ trang Releases của dự án.`
-          : 'Quá thời gian chờ khi kiểm tra cập nhật. Thử lại sau.';
+          ? T('Có bản {v} trên GitHub nhưng không tải được thông tin cập nhật. Tải bản cài mới từ trang Releases của dự án.', { v: latest })
+          : T('Quá thời gian chờ khi kiểm tra cập nhật. Thử lại sau.');
       } catch (e2) {
         updLog('github unreachable: ' + String(e2 && e2.message || e2));
-        message = 'Không kết nối được GitHub (mạng, proxy hoặc tường lửa). Thử lại sau.';
+        message = T('Không kết nối được GitHub (mạng, proxy hoặc tường lửa). Thử lại sau.');
       }
     }
     setUpd({ state: 'error', message });
@@ -1390,8 +1390,9 @@ function main() {
       dataDir: app.getPath('userData'), downloadDir: settings.downloadDir, maxConcurrent: settings.maxConcurrent,
       connections: settings.connections, speedLimit: settings.speedLimitKB * 1024, binDir: toolsDir(), media: mediaConfig(),
     });
-    await manager.ready; // the engine process has loaded the saved downloads
-    slog('engine ready');
+    // The engine process loads the saved downloads. Never wait for it forever: the window must open even if the engine is slow (its list arrives later).
+    const engineUp = await Promise.race([manager.ready.then(() => true), new Promise((r) => setTimeout(() => r(false), 20000))]);
+    slog(engineUp ? 'engine ready' : 'engine NOT ready after 20 s (continuing; watchdog restarts it)');
     try { fs.rmSync(path.join(require('os').tmpdir(), 'Vexlo-preview'), { recursive: true, force: true }); } catch { /* copies from the last run, may be in use */ }
     stats = new Stats(path.join(app.getPath('userData'), 'stats.json'));
     wireManager();

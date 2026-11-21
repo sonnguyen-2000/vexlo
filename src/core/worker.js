@@ -14,6 +14,7 @@ let manager = null;
 const CALLS = new Set(['add', 'pause', 'resume', 'remove', 'probeInfo', 'preview', 'update', 'confirm', 'pauseAll', 'resumeAll', 'prioritize', 'setTaskLimit', 'setSpeedLimit', 'setMaxConcurrent', 'shutdown']);
 
 function init(opts) {
+  if (manager) { post({ t: 'ready', list: manager.list() }); return; } // asked again: already started
   require('./http').setProxy(opts && opts.proxy);
   manager = new DownloadManager(opts);
   for (const name of ['update', 'added', 'removed', 'done']) { manager.on(name, (data) => post({ t: 'ev', name, data })); }

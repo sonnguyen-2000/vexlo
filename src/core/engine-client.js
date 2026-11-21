@@ -18,6 +18,7 @@ function spawnWorker() {
           post: (m) => child.postMessage(m),
           onMessage: (fn) => child.on('message', fn),
           onExit: (fn) => child.on('exit', fn),
+          onSpawn: (fn) => child.once('spawn', fn),
           kill: () => child.kill(),
         };
       }
@@ -52,6 +53,7 @@ class EngineClient extends EventEmitter {
   _start() {
     this._w = spawnWorker();
     const me = this._w;
+    me.gotReady = false;
     me.onMessage((msg) => { if (this._w === me) { this._onMessage(msg); } });
     me.onExit(() => {
       if (this._w !== me) { return; }
@@ -62,12 +64,25 @@ class EngineClient extends EventEmitter {
       this.restarts++;
       setTimeout(() => { if (!this._closing) { this._start(); } }, 500);
     });
-    me.post({ t: 'init', opts: { ...this.opts, downloadDir: this._dir, connections: this._conns, proxy: this._proxy, media: this._media } });
+    const sendInit = () => { try { me.post({ t: 'init', opts: { ...this.opts, downloadDir: this._dir, connections: this._conns, proxy: this._proxy, media: this._media } }); } catch { /* retried below */ } };
+    if (me.onSpawn) { me.onSpawn(sendInit); } // a message posted before the process exists can be lost: wait for it
+    sendInit();
+    // Watchdog: if the engine never answers (lost message, stuck start), ask again, then restart it. The app must never sit forever on an empty list.
+    let tries = 0;
+    const dog = setInterval(() => {
+      if (this._w !== me || this._closing || me.gotReady) { clearInterval(dog); return; }
+      tries++;
+      if (tries <= 3) { sendInit(); return; }
+      clearInterval(dog);
+      this.emit('warn', 'engine did not start, restarting it');
+      try { me.kill(); } catch { /* already gone */ }
+    }, 3000);
   }
 
   _onMessage(msg) {
     if (!msg) { return; }
     if (msg.t === 'ready') {
+      if (this._w) { this._w.gotReady = true; }
       this.cache = new Map((msg.list || []).map((s) => [s.id, s]));
       if (this._resolveReady) { this._resolveReady(); this._resolveReady = null; }
       else { for (const s of this.cache.values()) { this.emit('update', s); } }
