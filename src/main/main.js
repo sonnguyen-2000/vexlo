@@ -1430,11 +1430,26 @@ function main() {
 
   app.whenReady().then(async () => {
     slog('ready');
+    slog('loading settings');
     migrateOldData();
     loadSettings();
     readJustUpdated();
     applyInstallerOptions();
-    fs.mkdirSync(settings.downloadDir, { recursive: true });
+    // A download folder that cannot be created (a disconnected drive, a removed folder, no permission) must never stop the app from starting:
+    // use the system Downloads folder for this run and leave the saved choice alone, so it works again when the drive is back.
+    slog(`settings loaded; download folder ${settings.downloadDir}`);
+    // Asynchronous with a time limit: a folder on a dead network share or a missing drive can make the system wait for a very long time,
+    // and the whole app would freeze at start-up if that wait happened on the main thread.
+    const folderOk = await Promise.race([
+      fs.promises.mkdir(settings.downloadDir, { recursive: true }).then(() => true, (e) => { slog(`download folder error: ${e && e.code || e}`); return false; }),
+      new Promise((r) => setTimeout(() => r(false), 4000)),
+    ]);
+    if (!folderOk) {
+      slog(`download folder unusable (${settings.downloadDir}); using the Downloads folder for now`);
+      settings = { ...settings, downloadDir: app.getPath('downloads') };
+      try { fs.mkdirSync(settings.downloadDir, { recursive: true }); } catch { /* the system folder exists */ }
+    }
+    slog('starting the engine');
     manager = new EngineClient({
       dataDir: app.getPath('userData'), downloadDir: settings.downloadDir, maxConcurrent: settings.maxConcurrent,
       connections: settings.connections, speedLimit: settings.speedLimitKB * 1024, binDir: toolsDir(), media: mediaConfig(),
@@ -1455,6 +1470,9 @@ function main() {
     try { powerMonitor.on('resume', retryAfterWake); } catch { /* not available */ }
     startAutoUpdate();
     slog('started');
+  }).catch((e) => {
+    slog(`startup failed: ${e && e.stack || e}`);
+    try { require('electron').dialog.showErrorBox('Vexlo', `Vexlo could not start.\n\n${e && e.message || e}\n\nDetails: ${path.join(app.getPath('userData'), 'startup.log')}`); } catch { /* nothing more to do */ }
   });
 
   app.on('before-quit', (e) => {
