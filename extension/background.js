@@ -270,7 +270,7 @@ async function pollRefresh() {
     const wanted = new Set(pages.map((p) => stripHash(p.page)));
     for (const [page, v] of [...bgTabs]) {
       if (!wanted.has(page)) { closeBgTab(page, v.tabId); }                       // done: the new link was taken
-      else if (Date.now() - v.at > BG_TIMEOUT) { closeBgTab(page, v.tabId); bgCooldown.set(page, Date.now()); } // no link found: give up for a while
+      else if (Date.now() - v.at > BG_TIMEOUT) { closeBgTab(page, v.tabId); bgCooldown.set(page, Infinity); } // no link found: one try only, until the user presses Refresh again
     }
     for (const p of pages) {
       const page = stripHash(p.page);
