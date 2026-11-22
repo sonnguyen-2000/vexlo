@@ -251,6 +251,7 @@ const BG_TIMEOUT = 90000;
 const BG_COOLDOWN = 180000;
 const bgTabs = new Map();      // page -> { tabId, at }
 const bgCooldown = new Map();  // page -> when its tab was closed without a result
+const bgReq = new Map();       // page -> the newest request number seen (the app raises it when the user presses Refresh again)
 function closeBgTab(page, tabId) {
   bgTabs.delete(page);
   if (browser.tabs && browser.tabs.remove) { browser.tabs.remove(tabId).catch(() => {}); }
@@ -273,6 +274,12 @@ async function pollRefresh() {
     }
     for (const p of pages) {
       const page = stripHash(p.page);
+      if ((p.req || 0) > (bgReq.get(page) || 0)) { // pressed again: forget the waiting time and the old tab, try afresh
+        bgReq.set(page, p.req);
+        bgCooldown.delete(page);
+        const old = bgTabs.get(page);
+        if (old) { closeBgTab(page, old.tabId); }
+      }
       if (p.opened || bgTabs.has(page) || bgTabs.size >= BG_MAX || !/^https?:\/\//i.test(page)) { continue; }
       if (Date.now() - (bgCooldown.get(page) || 0) < BG_COOLDOWN) { continue; }
       const tab = await browser.tabs.create({ url: page + '#vexlo-refresh', active: false }).catch(() => null);

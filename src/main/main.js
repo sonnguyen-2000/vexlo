@@ -429,21 +429,23 @@ function notifyDuplicate(task) {
 
 /** Items coming from the browser: show an IDM-style confirmation window unless the user turned it off. */
 // ---- "Refresh link": a failed download whose signed link expired waits here for a fresh capture of its page
-const refreshWanted = new Map(); // task id -> { page, kind, at, opened }
+let refreshReq = 0; // grows with every press of "Refresh link": the extension starts over for a page whose number went up
+const refreshWanted = new Map(); // task id -> { page, kind, at, opened, req }
 const stripHash = (u) => String(u || '').split('#')[0];
 let extPollAt = 0; // last time the browser extension asked what to refresh: while it does, links are refreshed in a background tab
 const extensionAlive = () => Date.now() - extPollAt < 15000;
 function getRefreshPending() {
   extPollAt = Date.now();
   const out = [];
-  const seen = new Set();
+  const seen = new Map();
   for (const [id, w] of refreshWanted) {
     const t = manager && manager.get(id);
     if (!t || t.state.status !== 'error' || Date.now() - w.at > 30 * 60 * 1000) { refreshWanted.delete(id); continue; }
     const k = stripHash(w.page) + '|' + w.kind; // many files of one page need only one visit
-    if (seen.has(k)) { continue; }
-    seen.add(k);
-    out.push({ page: w.page, kind: w.kind, opened: !!w.opened });
+    if (seen.has(k)) { seen.get(k).req = Math.max(seen.get(k).req, w.req || 0); continue; }
+    const o = { page: w.page, kind: w.kind, opened: !!w.opened, req: w.req || 0 };
+    seen.set(k, o);
+    out.push(o);
   }
   return out;
 }
@@ -462,8 +464,9 @@ function requestRefresh(id, { auto = false } = {}) {
   const page = t && t.state.meta && t.state.meta.page;
   if (!t || t.state.status !== 'error' || !page || !/^https?:\/\//i.test(page)) { return false; }
   const prev = refreshWanted.get(id);
-  if (prev) { return true; }
-  refreshWanted.set(id, { page, kind: t.state.kind, at: Date.now(), opened: false }); // the extension picks it up and works in a background tab
+  if (prev && auto) { return true; }
+  // Pressed again after a failed try: start over (a new request number makes the extension forget its waiting time and open the page again).
+  refreshWanted.set(id, { page, kind: t.state.kind, at: Date.now(), opened: false, req: ++refreshReq }); // the extension picks it up and works in a background tab
   return true;
 }
 

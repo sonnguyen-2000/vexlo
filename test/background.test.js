@@ -628,3 +628,22 @@ test('refresh link in the background: pages are opened in unfocused, muted tabs 
   assert.equal(bg.calls.created[3].url, 'https://e.example/v5#vexlo-refresh');
   await api.close();
 });
+
+test('refresh link in the background: pressing Refresh again after a failed try opens the page again, even during the waiting time', async () => {
+  const manager = fakeManager();
+  let pending = [{ page: 'https://a.example/v1', kind: 'file', opened: false, req: 1 }];
+  const api = createApi(manager, { port: 0, getRefreshPending: () => pending });
+  await api.listen();
+  opened.push(api);
+  const bg = await loadBackground({ port: api.port, tabs: TAB });
+  const poll = bg.L.intervals[bg.L.intervals.length - 1];
+  await poll(); await sleep(80);
+  assert.equal(bg.calls.created.length, 1);
+  await poll(); await sleep(80);
+  assert.equal(bg.calls.created.length, 1, 'same request: not opened twice');
+  pending = [{ page: 'https://a.example/v1', kind: 'file', opened: false, req: 2 }]; // the user pressed the button again
+  await poll(); await sleep(80);
+  assert.equal(bg.calls.created.length, 2);
+  assert.deepEqual(bg.calls.closed, [701], 'the old tab was closed');
+  await api.close();
+});
