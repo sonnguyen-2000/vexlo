@@ -32,6 +32,9 @@ fn join(dir: &str, name: &str) -> String {
     if dir.ends_with('/') || dir.ends_with('\\') { format!("{}{}", dir, name) } else { format!("{}{}{}", dir, sep, name) }
 }
 
+/// Paths are the same file whichever separator they were written with.
+fn same_path(a: &str, b: &str) -> bool { a.replace('\\', "/") == b.replace('\\', "/") }
+
 pub fn find_duplicate(tasks: &[Task], q: &Query, exists: &dyn Fn(&str) -> bool, ignore_id: &str) -> Option<Duplicate> {
     let others: Vec<&Task> = tasks.iter().filter(|t| t.id != ignore_id).collect();
     let same_url = |t: &Task| strip_hash(&t.url) == strip_hash(&q.url);
@@ -49,7 +52,7 @@ pub fn find_duplicate(tasks: &[Task], q: &Query, exists: &dyn Fn(&str) -> bool, 
     if !q.filename.is_empty() && !q.dir.is_empty() {
         let p = join(&q.dir, &q.filename);
         if exists(&p) {
-            let task = others.iter().find(|t| t.status == "done" && t.path == p).map(|t| t.id.clone());
+            let task = others.iter().find(|t| t.status == "done" && same_path(&t.path, &p)).map(|t| t.id.clone());
             return Some(Duplicate::Done { path: p, task });
         }
     }

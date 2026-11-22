@@ -121,6 +121,7 @@ struct Job {
 }
 
 struct Track {
+    #[allow(dead_code)]
     audio: bool,
     ts: bool,
     single: Option<String>,
