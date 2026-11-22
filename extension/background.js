@@ -243,6 +243,48 @@ async function maybeAutoRefresh(tabId, item) {
   } catch { /* no app / not paired: the normal button still works */ }
 }
 
+// Refresh links in the background: the app lists the pages of downloads whose link expired (GET /api/refresh). This extension opens each
+// page in a background tab (not focused, muted), the page script plays the video, the fresh link is captured and sent, and the tab closes.
+// Several pages at once (BG_MAX tabs); pages the app already opened in the foreground (opened: true) are left alone.
+const BG_MAX = 3;
+const BG_TIMEOUT = 90000;
+const BG_COOLDOWN = 180000;
+const bgTabs = new Map();      // page -> { tabId, at }
+const bgCooldown = new Map();  // page -> when its tab was closed without a result
+function closeBgTab(page, tabId) {
+  bgTabs.delete(page);
+  if (browser.tabs && browser.tabs.remove) { browser.tabs.remove(tabId).catch(() => {}); }
+}
+let pollingRefresh = false;
+async function pollRefresh() {
+  if (pollingRefresh) { return; }
+  pollingRefresh = true;
+  try {
+    await settingsReady;
+    if (!settings.enabled || !browser.tabs || !browser.tabs.create) { return; }
+    const r = await fetch(appUrl('/api/refresh'), { headers: appHeaders(), cache: 'no-store' });
+    if (!r.ok) { return; }
+    const pages = (await r.json()).pages || [];
+    refreshCache = { at: Date.now(), pages };
+    const wanted = new Set(pages.map((p) => stripHash(p.page)));
+    for (const [page, v] of [...bgTabs]) {
+      if (!wanted.has(page)) { closeBgTab(page, v.tabId); }                       // done: the new link was taken
+      else if (Date.now() - v.at > BG_TIMEOUT) { closeBgTab(page, v.tabId); bgCooldown.set(page, Date.now()); } // no link found: give up for a while
+    }
+    for (const p of pages) {
+      const page = stripHash(p.page);
+      if (p.opened || bgTabs.has(page) || bgTabs.size >= BG_MAX || !/^https?:\/\//i.test(page)) { continue; }
+      if (Date.now() - (bgCooldown.get(page) || 0) < BG_COOLDOWN) { continue; }
+      const tab = await browser.tabs.create({ url: page + '#vexlo-refresh', active: false }).catch(() => null);
+      if (!tab) { continue; }
+      bgTabs.set(page, { tabId: tab.id, at: Date.now() });
+      if (browser.tabs.update) { browser.tabs.update(tab.id, { muted: true }).catch(() => {}); }
+      dbg('refresh link in the background:', page);
+    }
+  } catch { /* app not running or not paired: nothing to refresh */ } finally { pollingRefresh = false; }
+}
+setInterval(pollRefresh, 4000);
+
 // ---------------------------------------------------------------- playlist inspection (name / duration / quality like IDM)
 
 const INSPECT_TIMEOUT = 8000;

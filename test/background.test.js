@@ -47,7 +47,7 @@ async function loadBackground({ port, settings = {}, tabs = {}, cookies = [], na
     storage: { local: { get: async (d) => ({ ...d, port, ...settings }) }, onChanged: { addListener() {} } },
     webRequest: { onBeforeSendHeaders: cap('beforeSend'), onHeadersReceived: cap('headers'), onCompleted: cap('completed'), onErrorOccurred: cap('error') },
     webNavigation: { onCommitted: cap('nav') },
-    tabs: { get: async (id) => { if (!tabs[id]) { throw new Error('no tab'); } return { id, ...tabs[id] }; }, remove: async (id) => { (calls.closed = calls.closed || []).push(id); }, onRemoved: cap('tabRemoved') },
+    tabs: { create: async (o) => { (calls.created = calls.created || []).push(o); return { id: 700 + calls.created.length }; }, update: async (id, o) => { (calls.updated = calls.updated || []).push([id, o]); }, get: async (id) => { if (!tabs[id]) { throw new Error('no tab'); } return { id, ...tabs[id] }; }, remove: async (id) => { (calls.closed = calls.closed || []).push(id); }, onRemoved: cap('tabRemoved') },
     browserAction: { setBadgeText: async (o) => { calls.badge.push(o); }, setBadgeBackgroundColor: async () => {} },
     downloads: {
       onCreated: cap('dlCreated'),
@@ -60,7 +60,7 @@ async function loadBackground({ port, settings = {}, tabs = {}, cookies = [], na
     runtime: { getURL: (p) => 'moz-extension://x/' + p, onMessage: cap('message'), ...(native ? { sendNativeMessage: native } : {}) },
   };
   const sandbox = {
-    browser, fetch: extFetch, AbortController, URL, console, setTimeout, clearTimeout, Promise, Map, Set, JSON, Date, Math, Error, Number, String, Object, Array, RegExp, encodeURIComponent, decodeURIComponent,
+    browser, fetch: extFetch, setInterval: (fn) => { (L.intervals = L.intervals || []).push(fn); return 0; }, AbortController, URL, console, setTimeout, clearTimeout, Promise, Map, Set, JSON, Date, Math, Error, Number, String, Object, Array, RegExp, encodeURIComponent, decodeURIComponent,
   };
   sandbox.self = sandbox;
   vm.createContext(sandbox);
@@ -599,4 +599,32 @@ test('extension and app agree on which pages are videos', () => {
     'https://example.com/video.mp4', 'not a url',
   ];
   for (const u of urls) { assert.equal(ctx.SGMediaSite.isVideoPage(u), !!isMediaUrl(u), u); }
+});
+
+test('refresh link in the background: pages are opened in unfocused, muted tabs (max 3, one per page) and closed once the app took the link', async () => {
+  const manager = fakeManager();
+  let pending = [
+    { page: 'https://a.example/v1', kind: 'hls', opened: false },
+    { page: 'https://a.example/v1', kind: 'file', opened: false }, // same page, another kind: one visit
+    { page: 'https://b.example/v2', kind: 'file', opened: false },
+    { page: 'https://c.example/v3', kind: 'file', opened: true },  // the app opened this one itself in the foreground
+    { page: 'https://d.example/v4', kind: 'file', opened: false },
+    { page: 'https://e.example/v5', kind: 'file', opened: false }, // over the limit of 3 for now
+  ];
+  const api = createApi(manager, { port: 0, getRefreshPending: () => pending });
+  await api.listen();
+  opened.push(api);
+  const bg = await loadBackground({ port: api.port, tabs: TAB });
+  const poll = bg.L.intervals[bg.L.intervals.length - 1];
+  await poll(); await sleep(80); await poll(); await sleep(80);
+  assert.deepEqual(bg.calls.created.map((c) => c.url), ['https://a.example/v1#vexlo-refresh', 'https://b.example/v2#vexlo-refresh', 'https://d.example/v4#vexlo-refresh']);
+  assert.ok(bg.calls.created.every((c) => c.active === false));
+  assert.ok(bg.calls.updated.every(([, o]) => o.muted === true));
+  // the app took the link of page a: its tab goes away and the next waiting page gets a slot
+  pending = pending.filter((p) => !p.page.startsWith('https://a.example'));
+  await poll(); await sleep(80);
+  assert.deepEqual(bg.calls.closed, [701]);
+  await poll(); await sleep(80);
+  assert.equal(bg.calls.created[3].url, 'https://e.example/v5#vexlo-refresh');
+  await api.close();
 });

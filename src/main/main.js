@@ -428,20 +428,62 @@ function notifyDuplicate(task) {
 
 /** Items coming from the browser: show an IDM-style confirmation window unless the user turned it off. */
 // ---- "Refresh link": a failed download whose signed link expired waits here for a fresh capture of its page
-const refreshWanted = new Map(); // task id -> { page, kind, at }
+const refreshWanted = new Map(); // task id -> { page, kind, at, opened }
 const stripHash = (u) => String(u || '').split('#')[0];
+let extPollAt = 0; // last time the browser extension asked what to refresh: while it does, links are refreshed in a background tab
+const extensionAlive = () => Date.now() - extPollAt < 15000;
 function getRefreshPending() {
+  extPollAt = Date.now();
   const out = [];
+  const seen = new Set();
   for (const [id, w] of refreshWanted) {
     const t = manager && manager.get(id);
     if (!t || t.state.status !== 'error' || Date.now() - w.at > 30 * 60 * 1000) { refreshWanted.delete(id); continue; }
-    out.push({ page: w.page, kind: w.kind });
+    const k = stripHash(w.page) + '|' + w.kind; // many files of one page need only one visit
+    if (seen.has(k)) { continue; }
+    seen.add(k);
+    out.push({ page: w.page, kind: w.kind, opened: !!w.opened });
   }
   return out;
 }
 function takeRefresh(page) {
-  for (const [id, w] of refreshWanted) { if (stripHash(w.page) === stripHash(page)) { refreshWanted.delete(id); return id; } }
-  return '';
+  let first = '';
+  for (const [id, w] of [...refreshWanted]) {
+    if (stripHash(w.page) === stripHash(page)) { refreshWanted.delete(id); if (!first) { first = id; } }
+  }
+  return first;
+}
+
+/** Ask for a fresh link for a failed download. With the extension running this happens in a background tab (no window pops up);
+ *  without it the page opens in the browser as before. Returns false when there is nothing to refresh from. */
+function requestRefresh(id, { auto = false } = {}) {
+  const t = manager && manager.get(id);
+  const page = t && t.state.meta && t.state.meta.page;
+  if (!t || t.state.status !== 'error' || !page || !/^https?:\/\//i.test(page)) { return false; }
+  const prev = refreshWanted.get(id);
+  if (prev) { return true; }
+  const w = { page, kind: t.state.kind, at: Date.now(), opened: false };
+  refreshWanted.set(id, w);
+  if (!extensionAlive() && !auto) {
+    // The marker in the address tells the extension this tab is a refresh: it plays the video by itself, sends the new link and closes the tab.
+    const samePage = [...refreshWanted.values()].some((o) => o !== w && o.opened && stripHash(o.page) === stripHash(page));
+    w.opened = true;
+    if (!samePage) { shell.openExternal(stripHash(page) + '#vexlo-refresh'); }
+  }
+  return true;
+}
+
+// A link that stopped working in the middle of a download (expired signature, refused): ask for a fresh one by itself, twice at most.
+const AUTH_ERR = /HTTP (401|403|410)\b|hết hạn/;
+const autoRefreshes = new Map(); // task id -> attempts
+function maybeAutoRefreshLink(s) {
+  if (!manager || s.status !== 'error' || !AUTH_ERR.test(String(s.error || ''))) { return; }
+  const n = autoRefreshes.get(s.id) || 0;
+  if (n >= 2 || !extensionAlive()) { return; } // never pops a window up on its own: only with the extension in the background
+  if (requestRefresh(s.id, { auto: true })) {
+    autoRefreshes.set(s.id, n + 1);
+    netLog.push(`${new Date().toISOString().slice(11, 19)} ${s.filename || s.id}: link expired, fetching a new one (${n + 1}/2)`);
+  }
 }
 
 // A page can expose several links at once (master + media playlist, two qualities...). Only the first capture after "Refresh link" counts.
@@ -455,8 +497,19 @@ function handleExternalAdd(items) {
     const refreshed = takeRefresh(pageOf);
     const kind = detectKind(it.url, it.kind);
     const rk = refreshKey(pageOf, kind);
-    if (refreshed) { justRefreshed.set(rk, { at: Date.now(), id: '' }); }
-    else {
+    if (refreshed) {
+      justRefreshed.set(rk, { at: Date.now(), id: '' });
+      // A plain file with data already on disk keeps it: continue with the new address instead of starting over.
+      const old = manager.get(refreshed);
+      const st = old && old.state;
+      if (st && kind === 'file' && st.kind === 'file' && st.downloaded > 0 && ['error', 'paused'].includes(st.status) && (!st.size || !it.size || Number(it.size) === st.size)) {
+        justRefreshed.set(rk, { at: Date.now(), id: refreshed });
+        Promise.resolve(manager.relink(refreshed, { url: it.url, headers: it.headers, size: it.size })).then((ok) => {
+          if (!ok) { justRefreshed.delete(rk); handleExternalAdd([it]); }
+        }).catch(() => {});
+        return refreshed;
+      }
+    } else {
       const j = justRefreshed.get(rk);
       if (j && Date.now() - j.at < 20000 && j.id) { return j.id; } // same page, same kind, moments after a refresh: not a second download
     }
@@ -471,7 +524,7 @@ function handleExternalAdd(items) {
     const id = manager.add({
       ...it, filename, replaceId, dir, autoBase: settings.categorize && !it.filename ? settings.downloadDir : '', connections: settings.connections, start: !askNow, pending: askNow,
     });
-    if (refreshed) { justRefreshed.set(rk, { at: Date.now(), id }); }
+    if (refreshed) { justRefreshed.set(rk, { at: Date.now(), id }); autoRefreshes.set(id, autoRefreshes.get(refreshed) || 0); } // the new download inherits the count: no endless refresh loop
     if (askNow) { openConfirm(id, { replaced: !!replaceId }); } else if (items.length <= 3) { openProgress(id); }
     return id;
   });
@@ -693,15 +746,11 @@ function registerIpc() {
     if (page && /^https?:\/\//i.test(page)) { shell.openExternal(page); return true; }
     return false;
   });
-  ipcMain.handle('dl:refresh', (_e, id) => {
-    const t = manager.get(id);
-    const page = t && t.state.meta && t.state.meta.page;
-    if (!t || t.state.status !== 'error' || !page || !/^https?:\/\//i.test(page)) { return false; }
-    refreshWanted.set(id, { page, kind: t.state.kind, at: Date.now() });
-    // The marker in the address tells the extension this tab is a refresh: it plays the video by itself, sends the new link
-    // and closes the tab. (Servers ignore the part after #.)
-    shell.openExternal(stripHash(page) + '#vexlo-refresh');
-    return true;
+  ipcMain.handle('dl:refresh', (_e, idOrIds) => {
+    const list = (Array.isArray(idOrIds) ? idOrIds : [idOrIds]).filter((x) => typeof x === 'string');
+    let n = 0;
+    for (const id of list) { if (requestRefresh(id)) { n++; autoRefreshes.delete(id); } }
+    return n;
   });
   // "Xem thử phần đã tải": open what an unfinished download has so far in the computer's own player.
   ipcMain.handle('dl:preview', async (_e, id) => {
@@ -1158,7 +1207,7 @@ function wireManager() {
       n.show();
     }
   });
-  manager.on('error', (s) => { broadcast('dl:update', s); maybeAutoRetry(s); checkAfterAll(); });
+  manager.on('error', (s) => { broadcast('dl:update', s); maybeAutoRetry(s); maybeAutoRefreshLink(s); checkAfterAll(); });
   manager.on('warn', (e) => { netLog.push(`${new Date().toISOString().slice(11, 19)} ${String((e && e.message) || e).slice(0, 300)}`); if (netLog.length > 300) { netLog.splice(0, netLog.length - 300); } });
 }
 

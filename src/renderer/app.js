@@ -445,8 +445,9 @@
         if (!r.ok) { if (!r.handled) { toast(T('Không đọc được tệp'), true); } } else { toast(r.clean ? T('Không phát hiện mối đe dọa') : T('Windows Defender phát hiện mối đe dọa! Hãy mở Windows Security để xử lý.'), !r.clean); }
       }],
       one && [T('Sao chép link'), 'i-copy', async () => { await bridge.copyLink(one.id); toast(T('Đã sao chép link')); }],
-      one && one.status === 'error' && one.meta && one.meta.page && [T('Làm mới link'), 'i-play', async () => {
-        toast(await bridge.refreshLink(one.id) ? T('Đang lấy link mới: trang gốc mở trong trình duyệt, Vexlo tự phát video, lấy link rồi tự tải lại. Nếu video không tự chạy, bạn bấm phát.') : T('Không có địa chỉ trang gốc'), false);
+      sel.some((t) => t.status === 'error' && t.meta && t.meta.page) && [T('Làm mới link'), 'i-play', async () => {
+        const n = await bridge.refreshLink(sel.filter((t) => t.status === 'error' && t.meta && t.meta.page).map((t) => t.id));
+        toast(n ? T('Đang lấy link mới ở chế độ nền, Vexlo tự tải lại khi có link.') : T('Không có địa chỉ trang gốc'), !n);
       }],
       one && one.meta && one.meta.page && [T('Mở trang web gốc'), 'i-open', async () => {
         if (!(await bridge.openPage(one.id))) { toast(T('Không có địa chỉ trang gốc'), true); }

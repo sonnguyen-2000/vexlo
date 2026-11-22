@@ -227,6 +227,21 @@ class DownloadManager extends EventEmitter {
     this._scheduleSave();
   }
 
+  /** A fresh link for a download that already has data (an expired signed link): keep what was downloaded and continue with the new address.
+   *  Only plain files, and only when the new link is the same size; anything else returns false and the caller starts a new download. */
+  relink(id, { url, headers, size } = {}) {
+    const t = this.tasks.get(id);
+    if (!t || !/^https?:\/\//i.test(url || '')) { return false; }
+    const st = t.state;
+    if (st.kind !== 'file' || !['paused', 'error'].includes(st.status) || !(st.downloaded > 0)) { return false; }
+    if (st.size && Number(size) > 0 && Number(size) !== st.size) { return false; }
+    st.url = url;
+    st.finalUrl = '';
+    if (headers && typeof headers === 'object') { st.headers = headers; }
+    this.resume(id);
+    return true;
+  }
+
   async remove(id, { deleteFile = false } = {}) {
     const t = this.tasks.get(id);
     if (!t) { return; }
