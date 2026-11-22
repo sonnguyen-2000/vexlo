@@ -10,7 +10,7 @@ const { SpeedMeter, SpeedLimiter } = require('./limiter');
 const { parseM3u8, pickVariant } = require('./hls');
 const { parseMpd, pickRepresentation } = require('./dash');
 const { Download } = require('./download');
-const { sleep, uniquePath } = require('./util');
+const { sleep, uniquePath, ensureDir } = require('./util');
 
 const SEG_RETRIES = 6;
 const SEG_IDLE_MS = Number(process.env.VEXLO_IDLE_MS) || 8000; // a connection that sends nothing for this long is dropped and the segment is asked again on a fresh one
@@ -99,7 +99,7 @@ class SegmentedDownload extends EventEmitter {
       this._prepareNames();
       const plan = s.kind === 'dash' ? await this._planDash() : await this._planHls();
       if (this._stopReason) { return; }
-      await fsp.mkdir(this.partsDir, { recursive: true });
+      await ensureDir(this.partsDir);
       this._phase = 'download';
       await this._downloadAll(plan);
       if (this._stopReason) { return; }

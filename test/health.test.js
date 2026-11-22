@@ -46,3 +46,13 @@ test('healthy data gives no problems', async () => {
   const r = await H.healthCheck({ dir: d });
   assert.ok(r.every((x) => x.ok));
 });
+
+test('ensureDir accepts an existing folder and creates a missing one', async () => {
+  const { ensureDir, ensureDirSync } = require('../src/core/util');
+  const d = tmp();
+  await ensureDir(d);                                  // exists: nothing to do
+  await ensureDir(path.join(d, 'a', 'b'));             // missing: created
+  ensureDirSync(path.join(d, 'c'));
+  assert.ok(fs.statSync(path.join(d, 'a', 'b')).isDirectory() && fs.statSync(path.join(d, 'c')).isDirectory());
+  assert.strictEqual(await H.folderReachable(d, 1000), true);
+});

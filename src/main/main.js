@@ -115,8 +115,11 @@ function loadSettings() {
   saveSettings();
 }
 
+let tempDir = null; // { real, temp }: the saved download folder could not be reached at start, so a temporary one is used for this run
 function saveSettings() {
-  try { fs.mkdirSync(path.dirname(settingsFile()), { recursive: true }); fs.writeFileSync(settingsFile(), JSON.stringify(settings, null, 2)); } catch { /* ignore */ }
+  // The unreachable folder the user chose stays in the file (it works again when the drive is back); only a new choice replaces it.
+  const out = tempDir && settings.downloadDir === tempDir.temp ? { ...settings, downloadDir: tempDir.real } : settings;
+  try { fs.mkdirSync(path.dirname(settingsFile()), { recursive: true }); fs.writeFileSync(settingsFile(), JSON.stringify(out, null, 2)); } catch { /* ignore */ }
 }
 
 /** 'vi' or 'en': the chosen language, or the system language when set to automatic. */
@@ -544,7 +547,7 @@ function baseOptions(extra) {
 }
 
 function createMainWindow({ hidden = false } = {}) {
-  mainWin = new BrowserWindow(baseOptions({ width: 1060, height: 660, minWidth: 780, minHeight: 440, title: 'Vexlo' }));
+  mainWin = new BrowserWindow(baseOptions({ width: 1060, height: 660, minWidth: 860, minHeight: 440, title: 'Vexlo' }));
   secureWindow(mainWin);
   mainWin.loadFile(path.join(RENDERER, 'index.html'), pageOpts());
   mainWin.once('ready-to-show', () => { if (!hidden) { mainWin.show(); } });
@@ -1517,14 +1520,11 @@ function main() {
     slog(`settings loaded; download folder ${settings.downloadDir}`);
     // Asynchronous with a time limit: a folder on a dead network share or a missing drive can make the system wait for a very long time,
     // and the whole app would freeze at start-up if that wait happened on the main thread.
-    const folderOk = await Promise.race([
-      fs.promises.mkdir(settings.downloadDir, { recursive: true }).then(() => true, (e) => { slog(`download folder error: ${e && e.code || e}`); return false; }),
-      new Promise((r) => setTimeout(() => r(false), 4000)),
-    ]);
+    const folderOk = await Health.folderReachable(settings.downloadDir, 4000);
     if (!folderOk) {
       slog(`download folder unusable (${settings.downloadDir}); using the Downloads folder for now`);
-      settings = { ...settings, downloadDir: app.getPath('downloads') };
-      try { fs.mkdirSync(settings.downloadDir, { recursive: true }); } catch { /* the system folder exists */ }
+      tempDir = { real: settings.downloadDir, temp: app.getPath('downloads') };
+      settings = { ...settings, downloadDir: tempDir.temp };
     }
     slog('starting the engine');
     manager = new EngineClient({

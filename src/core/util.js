@@ -2,6 +2,10 @@
 const fs = require('fs');
 const path = require('path');
 
+/** mkdir -p that leaves an existing folder alone: creating a drive root such as D:\\ can fail on Windows even though it exists. */
+function ensureDirSync(dir) { try { if (fs.statSync(dir).isDirectory()) { return; } } catch { /* create it */ } fs.mkdirSync(dir, { recursive: true }); }
+async function ensureDir(dir) { try { if ((await fs.promises.stat(dir)).isDirectory()) { return; } } catch { /* create it */ } await fs.promises.mkdir(dir, { recursive: true }); }
+
 const WIN_RESERVED = /^(con|prn|aux|nul|com[1-9]|lpt[1-9])(\..*)?$/i;
 
 /** Make a string safe to use as a file name on Windows/macOS/Linux. */
@@ -336,5 +340,5 @@ function explainExtractFailure(attempts) {
 module.exports = {
   copyPrefix, looksLikeWebPage, extractDirIn, entriesCommand, parseListedEntries,
   listCommand, parseListedTotal, explainExtractFailure, extractCommands, isArchive, extractDirFor, parseImportList, plainNotes, downloadLinkIn, sanitizeFilename, filenameFromContentDisposition, filenameFromUrl, extFromMime,
-  pickFilename, uniquePath, sleep, atomicWriteJson,
+  pickFilename, uniquePath, sleep, atomicWriteJson, ensureDir, ensureDirSync,
 };

@@ -5,7 +5,7 @@ const path = require('path');
 const { EventEmitter } = require('events');
 const { request, classifyStatus, HttpError } = require('./http');
 const { SpeedMeter, SpeedLimiter } = require('./limiter');
-const { pickFilename, sleep, uniquePath, looksLikeWebPage, copyPrefix } = require('./util');
+const { pickFilename, sleep, uniquePath, looksLikeWebPage, copyPrefix, ensureDir } = require('./util');
 const { folderFor } = require('./category');
 
 const MIN_SPLIT = 512 * 1024;      // never split a segment smaller than this
@@ -204,7 +204,7 @@ class Download extends EventEmitter {
     s.resumable = info.resumable;
     s.etag = info.etag;
     s.lastModified = info.lastModified;
-    await fsp.mkdir(path.dirname(s.path), { recursive: true });
+    await ensureDir(path.dirname(s.path));
 
     if (!s.segments.length && s.resumable && s.size > 0) { s.segments = planSegments(s.size, s.connections); }
     // Open for read/write without truncating (resume keeps existing bytes).

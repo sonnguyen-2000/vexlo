@@ -28,8 +28,11 @@ function checkJson(dir, name, fix) {
 /** Can the folder be reached (and created) within `ms`? Never blocks the caller for longer. */
 function folderReachable(folder, ms) {
   if (!folder) { return Promise.resolve(true); }
+  // An existing folder is enough (mkdir on a drive root such as D:\\ fails on some Windows setups even though the folder is fine).
+  const reach = fs.promises.stat(folder).then((st) => st.isDirectory(), () => false)
+    .then((exists) => exists || fs.promises.mkdir(folder, { recursive: true }).then(() => true, () => false));
   return Promise.race([
-    fs.promises.mkdir(folder, { recursive: true }).then(() => true, () => false),
+    reach,
     new Promise((r) => setTimeout(() => r(false), ms)),
   ]);
 }

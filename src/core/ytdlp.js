@@ -8,7 +8,7 @@ const path = require('path');
 const { EventEmitter } = require('events');
 const { spawn, execFile } = require('child_process');
 const { SpeedMeter } = require('./limiter');
-const { sanitizeFilename, sleep, copyPrefix } = require('./util');
+const { sanitizeFilename, sleep, copyPrefix, ensureDir } = require('./util');
 const { Download } = require('./download');
 const http = require('./http');
 const { resolveFfmpeg } = require('./segmented');
@@ -356,7 +356,7 @@ class MediaDownload extends EventEmitter {
 
   async _download(bin, fmt, audio) {
     const s = this.state;
-    await fsp.mkdir(s.dir, { recursive: true });
+    await ensureDir(s.dir);
     const args = [...this._common(), '-f', fmt, '--newline', '--progress',
       '--progress-template', 'download:VXP|%(progress.downloaded_bytes)s|%(progress.total_bytes)s|%(progress.total_bytes_estimate)s|%(progress.speed)s|%(progress.eta)s',
       '--no-mtime', '--continue', '--concurrent-fragments', '4', '--windows-filenames', '-o', path.join(s.dir, s.base + '.%(ext)s')];

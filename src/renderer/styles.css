@@ -24,7 +24,7 @@ button{font:inherit;color:inherit}
 /* On big screens the whole window is scaled up (see applyScale in app.js) so text stays comfortable to read. */
 body{zoom:var(--z,1)}
 .app{display:grid;grid-template-rows:auto 1fr auto;height:calc(100vh / var(--z,1))}
-.toolbar{display:flex;align-items:center;gap:2px;padding:8px 12px;background:var(--panel);border-bottom:1px solid var(--line)}
+.toolbar{display:flex;align-items:center;gap:2px;padding:8px 12px;min-width:0;overflow:hidden;background:var(--panel);border-bottom:1px solid var(--line)}
 .tb{display:flex;flex-direction:column;align-items:center;gap:3px;min-width:68px;padding:7px 8px 5px;border:0;border-radius:8px;background:transparent;cursor:pointer;color:var(--fg)}
 .tb svg.ic{width:22px;height:22px}
 .tb span{font-size:11.5px;white-space:nowrap}
@@ -35,7 +35,7 @@ body{zoom:var(--z,1)}
 .tb.danger:hover:not(:disabled) svg.ic{color:var(--bad)}
 .sep{width:1px;height:38px;margin:0 6px;background:var(--line)}
 .grow{flex:1}
-.search{display:flex;align-items:center;gap:6px;width:230px;padding:0 10px;height:34px;border:1px solid var(--line);border-radius:8px;background:var(--panel2);color:var(--mut)}
+.search{display:flex;align-items:center;gap:6px;width:230px;flex:0 1 230px;min-width:96px;padding:0 10px;height:34px;border:1px solid var(--line);border-radius:8px;background:var(--panel2);color:var(--mut)}
 .search:focus-within{border-color:var(--acc);color:var(--fg)}
 .search input{flex:1;min-width:0;border:0;outline:0;background:transparent;color:var(--fg);font:inherit}
 
@@ -229,3 +229,7 @@ body.confirm{overflow:auto;background:var(--panel)}
 .stat-row .v{color:var(--mut);flex:none}
 .stat-empty{color:var(--mut);font-size:13px}
 @media (max-width:640px){.stat-tiles{grid-template-columns:repeat(2,1fr)}.stat-cols{grid-template-columns:1fr}}
+
+/* Narrow window: the toolbar buttons and the search box shrink instead of running out of the window. */
+@media (max-width:1060px){.toolbar{padding:8px 8px}.tb{min-width:54px;padding:6px 4px 4px}.tb span{font-size:10.5px}.search{flex-basis:150px}}
+@media (max-width:900px){.tb{min-width:46px;padding:6px 3px 4px}.tb span{font-size:10px}.search{flex-basis:110px}.sep{margin:0 2px}}
