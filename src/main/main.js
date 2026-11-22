@@ -455,22 +455,15 @@ function takeRefresh(page) {
   return first;
 }
 
-/** Ask for a fresh link for a failed download. With the extension running this happens in a background tab (no window pops up);
- *  without it the page opens in the browser as before. Returns false when there is nothing to refresh from. */
+/** Ask for a fresh link for a failed download. The browser extension does the work in a background tab; the app never starts or opens the
+ *  browser itself. When the extension is not running the request waits (30 minutes) until it is. Returns false when there is nothing to refresh from. */
 function requestRefresh(id, { auto = false } = {}) {
   const t = manager && manager.get(id);
   const page = t && t.state.meta && t.state.meta.page;
   if (!t || t.state.status !== 'error' || !page || !/^https?:\/\//i.test(page)) { return false; }
   const prev = refreshWanted.get(id);
   if (prev) { return true; }
-  const w = { page, kind: t.state.kind, at: Date.now(), opened: false };
-  refreshWanted.set(id, w);
-  if (!extensionAlive() && !auto) {
-    // The marker in the address tells the extension this tab is a refresh: it plays the video by itself, sends the new link and closes the tab.
-    const samePage = [...refreshWanted.values()].some((o) => o !== w && o.opened && stripHash(o.page) === stripHash(page));
-    w.opened = true;
-    if (!samePage) { shell.openExternal(stripHash(page) + '#vexlo-refresh'); }
-  }
+  refreshWanted.set(id, { page, kind: t.state.kind, at: Date.now(), opened: false }); // the extension picks it up and works in a background tab
   return true;
 }
 
@@ -751,7 +744,7 @@ function registerIpc() {
     const list = (Array.isArray(idOrIds) ? idOrIds : [idOrIds]).filter((x) => typeof x === 'string');
     let n = 0;
     for (const id of list) { if (requestRefresh(id)) { n++; autoRefreshes.delete(id); } }
-    return n;
+    return { n, waiting: n > 0 && !extensionAlive() };
   });
   // "Xem thử phần đã tải": open what an unfinished download has so far in the computer's own player.
   ipcMain.handle('dl:preview', async (_e, id) => {

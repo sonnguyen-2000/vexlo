@@ -287,6 +287,9 @@
     $('bPauseAll').disabled = ![...items.values()].some((t) => t.status === 'downloading' || t.status === 'queued');
     $('bErr').disabled = ![...items.values()].some((t) => t.status === 'error');
     $('bErr').lastElementChild.textContent = (errCount() ? T('Xóa lỗi ({n})', { n: errCount() }) : T('Xóa lỗi'));
+    const refreshable = refreshableTasks();
+    $('bRef').disabled = !refreshable.length;
+    $('bRef').lastElementChild.textContent = refreshable.length ? T('Làm mới link ({n})', { n: refreshable.length }) : T('Làm mới link');
     $('bClear').disabled = ![...items.values()].some((t) => t.status === 'done');
   }
 
@@ -370,6 +373,12 @@
    *  preset 'files' : menu "Xóa kèm tệp" / Shift+Delete - also deletes the saved files (always confirmed)
    *  no preset      : toolbar button / Delete key - follows Settings > "Khi xóa một mục đã tải xong" (default: ask)
    */
+  const refreshableTasks = () => [...items.values()].filter((t) => t.status === 'error' && t.meta && t.meta.page);
+  async function refreshLinks(list) {
+    const r = await bridge.refreshLink(list.map((t) => t.id));
+    if (!r || !r.n) { toast(T('Không có địa chỉ trang gốc'), true); return; }
+    toast(r.waiting ? T('Đã ghi nhận. Mở trình duyệt có tiện ích Vexlo, link sẽ được làm mới ngầm ở đó.') : T('Đang lấy link mới ở chế độ nền, Vexlo tự tải lại khi có link.'));
+  }
   const errCount = () => [...items.values()].filter((t) => t.status === 'error').length;
 
   async function removeSelected(preset) {
@@ -445,10 +454,8 @@
         if (!r.ok) { if (!r.handled) { toast(T('Không đọc được tệp'), true); } } else { toast(r.clean ? T('Không phát hiện mối đe dọa') : T('Windows Defender phát hiện mối đe dọa! Hãy mở Windows Security để xử lý.'), !r.clean); }
       }],
       one && [T('Sao chép link'), 'i-copy', async () => { await bridge.copyLink(one.id); toast(T('Đã sao chép link')); }],
-      sel.some((t) => t.status === 'error' && t.meta && t.meta.page) && [T('Làm mới link'), 'i-play', async () => {
-        const n = await bridge.refreshLink(sel.filter((t) => t.status === 'error' && t.meta && t.meta.page).map((t) => t.id));
-        toast(n ? T('Đang lấy link mới ở chế độ nền, Vexlo tự tải lại khi có link.') : T('Không có địa chỉ trang gốc'), !n);
-      }],
+      sel.some((t) => t.status === 'error' && t.meta && t.meta.page) && [T('Làm mới link'), 'i-play', () => refreshLinks(sel.filter((t) => t.status === 'error' && t.meta && t.meta.page))],
+      refreshableTasks().length > 1 && [T('Làm mới tất cả link lỗi ({n})', { n: refreshableTasks().length }), 'i-play', () => refreshLinks(refreshableTasks())],
       one && one.meta && one.meta.page && [T('Mở trang web gốc'), 'i-open', async () => {
         if (!(await bridge.openPage(one.id))) { toast(T('Không có địa chỉ trang gốc'), true); }
       }],
@@ -930,6 +937,7 @@
   $('bPause').addEventListener('click', () => bridge.pause(selTasks().filter((t) => t.status === 'downloading' || t.status === 'queued').map((t) => t.id)));
   $('bPauseAll').addEventListener('click', () => bridge.pauseAll());
   $('bDel').addEventListener('click', () => removeSelected());
+  $('bRef').addEventListener('click', () => refreshLinks(refreshableTasks()));
   $('bErr').addEventListener('click', async () => {
     const ids = [...items.values()].filter((t) => t.status === 'error').map((t) => t.id);
     if (!ids.length) { return; }

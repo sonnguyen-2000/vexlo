@@ -205,6 +205,10 @@
     'Đã đăng ký lại cầu nối với trình duyệt.': 'The browser helper was registered again.',
     'Còn {n} việc cần bạn xem ở trên.': '{n} item(s) above need your attention.',
     'Mọi thứ đều ổn.': 'Everything is fine.',
+    'Làm mới link ({n})': 'Refresh links ({n})',
+    'Làm mới tất cả link lỗi ({n})': 'Refresh all failed links ({n})',
+    'Đã ghi nhận. Mở trình duyệt có tiện ích Vexlo, link sẽ được làm mới ngầm ở đó.': 'Noted. Open the browser with the Vexlo extension and the links are refreshed in the background there.',
+    'Lấy link mới (chạy ngầm trong trình duyệt) cho mọi tải bị lỗi có trang gốc': 'Get new links (in the background of the browser) for every failed download that has a source page',
     'Làm mới link': 'Refresh link', 'Đang lấy link mới ở chế độ nền, Vexlo tự tải lại khi có link.': 'Getting fresh links in the background; downloads restart by themselves when they arrive.', 'Đang lấy link mới: trang gốc mở trong trình duyệt, Vexlo tự phát video, lấy link rồi tự tải lại. Nếu video không tự chạy, bạn bấm phát.': 'Getting a fresh link: the page opens in your browser, Vexlo plays the video, takes the link and restarts the download. If the video does not start by itself, press play.',
     // ---- progress window
     'Đã tải': 'Downloaded', 'Tải bị lỗi.': 'Download failed.', 'Lần sau khi tải lỗi:': 'Next time a download fails:', 'Giữ cửa sổ': 'Keep window', 'Tự đóng khi xong': 'Close when finished',
