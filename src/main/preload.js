@@ -46,6 +46,8 @@ contextBridge.exposeInMainWorld('vexlo', {
   grabScan: call('grab:scan'),
   grabAdd: call('grab:add'),
   exportLog: call('app:exportLog'),
+  repair: call('app:repair'),
+  recovery: call('rec:do'),
   updateStatus: call('update:status'),
   updateInstall: call('update:install'),
   openExtensionFolder: call('app:openExtensionFolder'),

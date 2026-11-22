@@ -25,6 +25,7 @@ const I18N = require('../renderer/i18n');
 
 const VERSION = require('../../package.json').version;
 const RENDERER = path.join(__dirname, '..', 'renderer');
+const Health = require('./health');
 const ICON = path.join(__dirname, '..', '..', 'build', 'icon.png');
 const TRAY_ICON = path.join(__dirname, '..', '..', 'build', 'tray.png');
 const EXT_DIR = app.isPackaged ? path.join(process.resourcesPath, 'extension') : path.join(__dirname, '..', '..', 'extension');
@@ -794,6 +795,18 @@ function registerIpc() {
   });
   ipcMain.handle('app:info', () => appInfo());
   ipcMain.handle('update:check', () => checkUpdateNow());
+  // "Check & repair": data files, download folder, the engine, the browser connection and the browser helper registration.
+  ipcMain.handle('app:repair', async () => {
+    const lines = describeHealth(await Health.healthCheck({ dir: app.getPath('userData') }));
+    let problems = lines.length;
+    try { if (manager) { manager.list(); } else { throw new Error('no engine'); } } catch { lines.push(T('Tiến trình tải ngầm không phản hồi: hãy khởi động lại Vexlo.')); problems++; }
+    if (api && !apiError) { lines.push(T('Kết nối với trình duyệt sẵn sàng (cổng {p}).', { p: settings.port })); }
+    else { lines.push(T('Kết nối với trình duyệt chưa sẵn sàng: {e}', { e: apiError || '' })); problems++; }
+    registerNativeHost(); // writes the browser helper files and registry entries again: fixes a helper that points at an old install folder
+    lines.push(T('Đã đăng ký lại cầu nối với trình duyệt.'));
+    lines.push(problems ? T('Còn {n} việc cần bạn xem ở trên.', { n: problems }) : T('Mọi thứ đều ổn.'));
+    return lines;
+  });
   const releaseRepo = () => {
     const pub = ((require('../../package.json').build || {}).publish || [])[0] || {};
     return !pub.owner || /^YOUR_/.test(pub.owner) || !pub.repo ? null : pub;
@@ -1421,6 +1434,66 @@ function startedHiddenByHelper() {
   } catch { return false; }
 }
 
+// ------------------------------------------------------------------ start-up guard, recovery window, self-check
+let startedOk = false;
+let recWin = null;
+let startWatch = null;
+
+/** Each result of a check as one readable line. */
+function describeHealth(results) {
+  const lines = [];
+  for (const r of results) {
+    if (r.id === 'settings.json' && !r.ok) { lines.push(T('Tệp cài đặt bị hỏng: đã cất sang một bên và dùng cài đặt mặc định.')); }
+    else if (r.id === 'downloads.json' && !r.ok) { lines.push(T('Danh sách tải bị hỏng: đã cất sang một bên (bản sao vẫn nằm trong thư mục dữ liệu).')); }
+    else if (r.id === 'download-folder' && !r.ok) { lines.push(T('Thư mục tải không truy cập được: {f}. Kiểm tra ổ đĩa hoặc chọn thư mục khác trong Cài đặt.', { f: r.detail })); }
+    else if (r.id === 'stale-flag') { lines.push(T('Đã dọn một tệp đánh dấu cũ.')); }
+  }
+  return lines;
+}
+
+function lastStartupLog(n) { try { return fs.readFileSync(path.join(app.getPath('userData'), 'startup.log'), 'utf8').trim().split('\n').slice(-n).join('\n'); } catch { return ''; } }
+
+/** A small window that works even when the normal start-up is stuck: check for a new version, reset the settings, open the data folder. */
+function openRecovery() {
+  if (startedOk || recWin) { return; }
+  slog('start-up is taking too long: opening the recovery window');
+  try {
+    recWin = new BrowserWindow(baseOptions({ width: 560, height: 520, title: 'Vexlo', resizable: false }));
+    secureWindow(recWin);
+    recWin.loadFile(path.join(RENDERER, 'recovery.html'), pageOpts());
+    recWin.once('ready-to-show', () => { if (recWin) { recWin.show(); } });
+    recWin.on('closed', () => { recWin = null; });
+  } catch (e) { slog('recovery window failed: ' + (e && e.message || e)); }
+}
+
+function registerRecoveryIpc() {
+  ipcMain.handle('rec:do', async (_e, action) => {
+    const dir = app.getPath('userData');
+    switch (action) {
+      case 'info':
+        return {
+          log: lastStartupLog(8), update: updStatus,
+          text: {
+            title: T('Vexlo đang khởi động chậm hoặc bị kẹt'),
+            body: T('Bạn vẫn có thể cập nhật lên bản mới (thường là cách sửa nhanh nhất) hoặc đặt lại cài đặt. Dữ liệu và danh sách tải không bị xóa.'),
+            update: T('Kiểm tra cập nhật'), install: T('Cài bản mới'), repair: T('Kiểm tra & sửa lỗi'), reset: T('Đặt lại cài đặt'), folder: T('Mở thư mục dữ liệu'), restart: T('Khởi động lại'),
+            checking: T('Đang kiểm tra bản mới…'), downloading: T('Đang tải bản mới…'), ready: T('Đã tải xong bản'), latest: T('Bạn đang dùng bản mới nhất.'), error: T('Không kiểm tra được'), dev: T('Bản chạy thử không có cập nhật.'),
+          },
+        };
+      case 'update': return checkUpdateNow();
+      case 'install': applyUpdateNow(); return true;
+      case 'repair': return describeHealth(await Health.healthCheck({ dir })).concat(T('Đã kiểm tra xong.'));
+      case 'reset': { // the old file is kept next to it, never deleted
+        try { fs.renameSync(path.join(dir, 'settings.json'), path.join(dir, `settings.json.old-${Date.now()}`)); } catch { /* none to move */ }
+        app.relaunch(); app.exit(0); return true;
+      }
+      case 'folder': shell.openPath(dir); return true;
+      case 'restart': app.relaunch(); app.exit(0); return true;
+      default: return false;
+    }
+  });
+}
+
 function main() {
   slog(`start v${VERSION} args=${process.argv.slice(1).join(' ') || '-'}`);
   if (!app.requestSingleInstanceLock()) { slog('another copy is running (single-instance lock): exiting'); app.quit(); return; }
@@ -1430,6 +1503,14 @@ function main() {
 
   app.whenReady().then(async () => {
     slog('ready');
+    const dataDir = app.getPath('userData');
+    const safeMode = Health.previousStartFailed(dataDir);
+    if (safeMode) { slog('the previous start did not finish: checking the data first (safe mode)'); }
+    Health.markStarting(dataDir, process.pid);
+    registerRecoveryIpc(); // first: it has to work even if everything after this gets stuck
+    startWatch = setTimeout(openRecovery, 15000);
+    const health = await Health.healthCheck({ dir: dataDir, checkFolder: false }); // a damaged data file is moved aside before it is read
+    for (const line of describeHealth(health)) { slog('repaired: ' + line); }
     slog('loading settings');
     migrateOldData();
     loadSettings();
@@ -1470,8 +1551,14 @@ function main() {
     try { powerMonitor.on('resume', retryAfterWake); } catch { /* not available */ }
     startAutoUpdate();
     slog('started');
+    startedOk = true;
+    clearTimeout(startWatch);
+    Health.markStarted(dataDir);
+    if (recWin) { recWin.close(); if (!(process.argv.includes('--hidden') && tray)) { showMain(); } } // it did start after all
+    if (safeMode && Notification.isSupported()) { new Notification({ title: 'Vexlo', body: T('Lần mở trước bị gián đoạn. Vexlo đã tự kiểm tra dữ liệu và khởi động lại bình thường.') }).show(); }
   }).catch((e) => {
     slog(`startup failed: ${e && e.stack || e}`);
+    openRecovery();
     try { require('electron').dialog.showErrorBox('Vexlo', `Vexlo could not start.\n\n${e && e.message || e}\n\nDetails: ${path.join(app.getPath('userData'), 'startup.log')}`); } catch { /* nothing more to do */ }
   });
 

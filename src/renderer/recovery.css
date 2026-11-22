@@ -1,0 +1,6 @@
+body.rec { padding: 24px 28px; overflow: auto; }
+.rec h1 { font-size: 18px; margin: 0 0 8px; }
+.rec p { margin: 0 0 14px; line-height: 1.5; }
+.rbox { padding: 10px 12px; border-radius: 8px; background: var(--panel, rgba(127,127,127,.12)); margin-bottom: 14px; min-height: 20px; white-space: pre-line; }
+.rbtns { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; }
+.rlog { font-size: 11px; opacity: .75; white-space: pre-wrap; margin: 0; max-height: 130px; overflow: auto; }

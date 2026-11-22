@@ -886,6 +886,10 @@
     const f = await bridge.exportLog();
     $('logMsg').textContent = f ? T('Đã lưu nhật ký: {f}', { f }) : '';
   });
+  $('bRepair').addEventListener('click', async () => {
+    $('repairMsg').textContent = T('Đang kiểm tra…');
+    try { $('repairMsg').textContent = (await bridge.repair()).join('\n'); } catch { $('repairMsg').textContent = T('Không kiểm tra được'); }
+  });
   $('bExpList').addEventListener('click', async () => {
     const r = await bridge.exportList();
     $('listMsg').textContent = r && r.file ? T('Đã lưu {n} mục: {f}', { n: r.count, f: r.file }) : '';
