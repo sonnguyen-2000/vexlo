@@ -436,3 +436,79 @@ fn friendly_error_matches_js() {
     }
     report(bad);
 }
+
+fn lt(s: &str) -> vexlo_core::schedule::LocalTime {
+    let v: Vec<i64> = s.split(',').map(|x| x.parse().unwrap()).collect();
+    vexlo_core::schedule::LocalTime { year: v[0] as i32, month: v[1] as u32, day: v[2] as u32, weekday: v[3] as u32, hour: v[4] as u32, minute: v[5] as u32 }
+}
+
+#[test]
+fn hhmm_matches_js() {
+    let mut bad = vec![];
+    for r in rows("tomin") {
+        let t = unhex(&r[0]);
+        check("tomin", &vexlo_core::schedule::to_minutes(&t).to_string(), &r[1], &t, &mut bad);
+    }
+    report(bad);
+}
+
+#[test]
+fn schedule_matches_js() {
+    use vexlo_core::schedule::{due_actions, Action, Schedule, State};
+    let mut bad = vec![];
+    for r in rows("dsched") {
+        let desc = unhex(&r[0]);
+        let f: Vec<&str> = desc.split('|').collect();
+        let sched = Schedule { enabled: f[0] == "1", start: unhex(f[1]), stop: unhex(f[2]), days: if f[3] == "~" { vec![] } else { f[3].split('.').map(|d| d.parse().unwrap()).collect() } };
+        let grace: i32 = f[4].parse().unwrap();
+        let init: Vec<&str> = f[5].split(',').collect();
+        let mut state = State { start: if init[0] == "~" { None } else { Some(unhex(init[0])) }, stop: if init[1] == "~" { None } else { Some(unhex(init[1])) } };
+        let got: Vec<String> = f[6].split(';').map(|n| {
+            let a = due_actions(lt(n), Some(&sched), &mut state, grace);
+            if a.is_empty() { "-".to_string() } else { a.iter().map(|x| if *x == Action::Start { "start" } else { "stop" }).collect::<Vec<_>>().join("+") }
+        }).collect();
+        check("dsched", &got.join(","), &r[1], &desc, &mut bad);
+    }
+    report(bad);
+}
+
+#[test]
+fn limit_window_matches_js() {
+    use vexlo_core::schedule::{effective_limit_kb, LimitOptions};
+    let mut bad = vec![];
+    for r in rows("limit") {
+        let desc = unhex(&r[0]);
+        let f: Vec<&str> = desc.split('|').collect();
+        let o = LimitOptions { limit: f[0].parse().unwrap(), window_enabled: f[1] == "1", window_from: unhex(f[2]), window_to: unhex(f[3]), window_limit: f[4].parse().unwrap() };
+        check("limit", &bits(effective_limit_kb(lt(f[5]), &o)), &r[1], &desc, &mut bad);
+    }
+    report(bad);
+}
+
+#[test]
+fn duplicates_match_js() {
+    use vexlo_core::dupes::{find_duplicate, Duplicate, Query, Task};
+    let kind = |s: &str| if s == "~" { None } else { Some(s.to_string()) };
+    let mut bad = vec![];
+    for r in rows("dupes") {
+        let desc = unhex(&r[0]);
+        let f: Vec<&str> = desc.split('|').collect();
+        let tasks: Vec<Task> = f[0].split(';').filter(|x| !x.is_empty()).map(|t| {
+            let c: Vec<&str> = t.split(',').collect();
+            Task { id: c[0].into(), url: unhex(c[1]), filename: unhex(c[2]), path: unhex(c[3]), status: c[4].into(), pending: c[5] == "1", kind: kind(c[6]), page: unhex(c[7]), title: unhex(c[8]) }
+        }).collect();
+        let q: Vec<&str> = f[1].split(',').collect();
+        let query = Query { url: unhex(q[0]), filename: unhex(q[1]), dir: unhex(q[2]), page: unhex(q[3]), title: unhex(q[4]), kind: kind(q[5]) };
+        let existing: Vec<String> = f[2].split(',').filter(|x| !x.is_empty()).map(unhex).collect();
+        // paths are compared with '/' so that the Windows build agrees with the fixtures
+        let exists = |p: &str| existing.iter().any(|e| e == &p.replace('\\', "/"));
+        let got = match find_duplicate(&tasks, &query, &exists, f[3]) {
+            None => "-".to_string(),
+            Some(Duplicate::Active { task }) => format!("active:{}", task),
+            Some(Duplicate::Error { task }) => format!("error:{}", task),
+            Some(Duplicate::Done { path, task }) => format!("done:{}:{}", hx(&path.replace('\\', "/")), task.unwrap_or("-".into())),
+        };
+        check("dupes", &got, &r[1], &desc, &mut bad);
+    }
+    report(bad);
+}

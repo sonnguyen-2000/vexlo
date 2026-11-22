@@ -4,6 +4,8 @@
 pub mod client;
 pub mod download;
 pub mod error;
+pub mod fetch;
+pub mod segmented;
 pub mod limiter;
 pub mod probe;
 

@@ -1,10 +1,8 @@
-[package]
-name = "vexlo-core"
-version = "0.1.0"
-edition = "2021"
-description = "Download engine and helpers of Vexlo (Rust port of src/core)"
-license = "MIT"
+[workspace]
+resolver = "2"
+members = ["vexlo-core", "vexlo-net"]
 
-# Stage 1 has no dependencies on purpose: everything here is pure logic that is checked against the JavaScript
-# implementation (tests/differential.rs reads fixtures produced by tools/gen-fixtures.js).
-[dependencies]
+[profile.release]
+lto = true
+codegen-units = 1
+strip = true

@@ -12,6 +12,8 @@ const { SpeedMeter } = require('../../src/core/limiter');
 const hls = require('../../src/core/hls');
 const dash = require('../../src/core/dash');
 const ytdlp = require('../../src/core/ytdlp');
+const schedule = require('../../src/core/schedule');
+const { findDuplicate } = require('../../src/core/dupes');
 
 const hex = (s) => Buffer.from(String(s), 'utf8').toString('hex');
 let seed = 12345;
@@ -21,7 +23,7 @@ const pick = (a) => a[Math.floor(rnd() * a.length)];
 const POOL = ['a', 'B', 'z', '0', '9', ' ', ' ', '.', '.', '-', '_', '/', '\\', ':', '*', '?', '"', '<', '>', '|', '\t', '\n', 'é', 'ü', 'ệ', 'Ă', '日', '本', '\u00a0', '\u3000', '\ufffd', '\ufeff', '%', '%20', '%C3%A9', '%zz', '%E6%97%A5', ';', '=', "'", 'file', 'CON', 'nul', 'com1', 'LPT9', '.mp4', '.exe', '.zip', 'x'.repeat(40)];
 const randomString = (n) => { let s = ''; const k = 1 + Math.floor(rnd() * n); for (let i = 0; i < k; i++) { s += pick(POOL); } return s; };
 
-const out = { sanitize: [], cd: [], url: [], mime: [], web: [], pick: [], cat: [], plan: [], retry: [], sched: [], meter: [], classify: [], probe: [], proxy: [], bypass: [], urljoin: [], hls: [], variant: [], dash: [], dur: [], ytmedia: [], ytfmt: [], ytprog: [], yterr: [] };
+const out = { sanitize: [], cd: [], url: [], mime: [], web: [], pick: [], cat: [], plan: [], retry: [], sched: [], meter: [], classify: [], probe: [], proxy: [], bypass: [], urljoin: [], hls: [], variant: [], dash: [], dur: [], ytmedia: [], ytfmt: [], ytprog: [], yterr: [], tomin: [], dsched: [], limit: [], dupes: [] };
 
 const sanitizeCases = ['', ' ', '...', 'a.b.c', 'CON', 'con.txt', 'com1', 'LPT1.log', 'COM0', 'a'.repeat(300) + '.mp4', '日本語'.repeat(80) + '.zip', 'x'.repeat(179) + '.verylongextension1234567890', 'file name . ', '  .hidden', 'a\u00a0\u00a0b', 'a:b*c?d"e<f>g|h', 'tab\there', '\ufffdabc\ufffd', '😀'.repeat(100) + '.mp4', '..a..', 'name.'];
 for (let i = 0; i < 400; i++) { sanitizeCases.push(randomString(12)); }
@@ -257,6 +259,57 @@ for (const c of progCases) { const r = ytdlp.parseProgress(c); out.ytprog.push([
 const errFrags = ['ERROR: [youtube] abc123: Sign in to confirm you’re not a bot', 'ERROR: [youtube] abc: Sign in to confirm youre not a bot', 'Use --cookies-from-browser', 'cookies are required for this', 'cookies\nrequired', 'Private video. Sign in', 'This video is private', 'Video unavailable', 'ERROR: [TikTok] 77: Unsupported URL: https://x', 'HTTP Error 429: Too Many Requests', 'rate-limited', 'rate limit', 'ffmpeg not found', 'ffprobe and ffmpeg are fine', 'No space left on device', 'Unable to extract nsig', 'HTTP Error 403: Forbidden', 'getaddrinfo failed', 'Connection reset by peer', 'connection refused', 'The account associated with this video has been terminated', 'account x terminated', 'Requested format is not available', 'ERROR: [generic] Something odd: details here', 'plain text line', '  ', '', 'Log in to continue', 'you must be 18', 'Members-only content', 'ERROR: first\nERROR: [x] y: second', 'WARNING: x\nlast line', 'error: lower case', 'x'.repeat(300), 'ERROR: [a:b] id-1_x:   spaced', 'ERROR: [] not tag: x', 'ERROR: é [bad tag'];
 for (const f of errFrags) { const r = ytdlp.friendlyError(f); out.yterr.push([hex(f), `${r.code}|${hex(r.message)}`]); }
 for (let i = 0; i < 300; i++) { const n = 1 + Math.floor(rnd() * 4); let t = ''; for (let j = 0; j < n; j++) { t += pick(errFrags) + pick(['\n', ' ', '', '\r\n']); } const r = ytdlp.friendlyError(t); out.yterr.push([hex(t), `${r.code}|${hex(r.message)}`]); }
+
+// ---- schedule
+for (const t of ['08:00', '8:00', '23:59', '24:00', '7:5', '', 'x', '00:00', '0:00', '12:30', ' 09:15 ', '19:60', '20:00', '1:00', '01:00', '001:00', '9:5a', ':30', '10:', '10:30:00', '\t7:07\n', '-1:00', '٣:٠٠']) { out.tomin.push([hex(t), String(schedule.toMinutes(t))]); }
+const fields = (d) => [d.getFullYear(), d.getMonth() + 1, d.getDate(), d.getDay(), d.getHours(), d.getMinutes()];
+const times = ['08:00', '8:00', '23:55', '00:05', '12:30', '', 'bad', '07:07', '22:00'];
+for (let i = 0; i < 300; i++) {
+  const sched = { enabled: rnd() < 0.85, start: pick(times), stop: pick(times), days: pick([[], [], [1, 2, 3, 4, 5], [0, 6], [3], [0, 1, 2, 3, 4, 5, 6]]) };
+  const grace = pick([10, 10, 0, 1, 30]);
+  const todayKey = (d) => `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`;
+  const base = new Date(2026, 10 + Math.floor(rnd() * 3), 1 + Math.floor(rnd() * 28), 0, 0);
+  const state = {};
+  if (rnd() < 0.3) { state.start = todayKey(base); }
+  if (rnd() < 0.2) { state.stop = '2020-1-1'; }
+  const init = [state.start === undefined ? '~' : hex(state.start), state.stop === undefined ? '~' : hex(state.stop)].join(',');
+  const nowsList = []; const results = [];
+  let minute = Math.floor(rnd() * 600);
+  for (let j = 0; j < 14; j++) {
+    minute += Math.floor(rnd() * 120);
+    const d = new Date(base.getTime() + minute * 60000);
+    nowsList.push(fields(d).join(','));
+    const a = schedule.dueActions(d, sched.enabled || rnd() < 0 ? sched : sched, state, grace);
+    results.push(a.length ? a.join('+') : '-');
+  }
+  const desc = [sched.enabled ? 1 : 0, hex(sched.start), hex(sched.stop), sched.days.join('.') || '~', grace, init, nowsList.join(';')].join('|');
+  out.dsched.push([hex(desc), results.join(',')]);
+}
+for (let i = 0; i < 300; i++) {
+  const o = { limit: pick([0, 0, 100, 500, 2048]), windowEnabled: rnd() < 0.8, windowFrom: pick(times), windowTo: pick(times), windowLimit: pick([0, 50, 1000]) };
+  const d = new Date(2026, 10, 3, Math.floor(rnd() * 24), Math.floor(rnd() * 60));
+  const desc = [o.limit, o.windowEnabled ? 1 : 0, hex(o.windowFrom), hex(o.windowTo), o.windowLimit, fields(d).join(',')].join('|');
+  out.limit.push([hex(desc), f64hex(schedule.effectiveLimitKB(d, o))]);
+}
+
+// ---- duplicate detection
+const dvocab = { url: ['https://a.com/x.zip', 'https://a.com/x.zip#frag', 'https://a.com/y.zip', 'https://b.com/v?id=1', 'https://b.com/v?id=2'], name: ['x.zip', 'X.ZIP', 'y.zip', 'video.mp4', ''], status: ['downloading', 'queued', 'paused', 'error', 'done', 'pending'], kind: [undefined, 'file', 'hls', 'media'], page: ['', 'https://p.com/1', 'https://p.com/1#top', 'https://p.com/2'], title: ['', 'My Video', 'my video', 'Other'] };
+const dlDir = 'D:/dl';
+for (let i = 0; i < 400; i++) {
+  const tasks = []; const n = Math.floor(rnd() * 5);
+  for (let j = 0; j < n; j++) {
+    const name = pick(dvocab.name);
+    tasks.push({ id: 't' + j, url: pick(dvocab.url), filename: name, path: rnd() < 0.5 ? path.posix.join(dlDir, name) : '', status: pick(dvocab.status), pending: rnd() < 0.2, kind: pick(dvocab.kind), meta: { page: pick(dvocab.page), title: pick(dvocab.title) } });
+  }
+  const q = { url: pick(dvocab.url), filename: pick(dvocab.name), dir: pick([dlDir, dlDir, '']), page: pick(dvocab.page), title: pick(dvocab.title), kind: pick(dvocab.kind) };
+  const existing = new Set(); for (const nm of dvocab.name) { if (nm && rnd() < 0.4) { existing.add(path.posix.join(dlDir, nm)); } }
+  const ignoreId = rnd() < 0.2 ? 't0' : '';
+  const r = findDuplicate(tasks, q, { exists: (p) => existing.has(p), ignoreId });
+  const enc = (t) => [t.id, hex(t.url), hex(t.filename), hex(t.path), t.status, t.pending ? 1 : 0, t.kind === undefined ? '~' : t.kind, hex(t.meta.page), hex(t.meta.title)].join(',');
+  const desc = [tasks.map(enc).join(';'), [hex(q.url), hex(q.filename), hex(q.dir), hex(q.page), hex(q.title), q.kind === undefined ? '~' : q.kind].join(','), [...existing].map(hex).join(','), ignoreId].join('|');
+  const res = !r ? '-' : r.type === 'done' ? `done:${hex(r.path)}:${r.task ? r.task.id : '-'}` : `${r.type}:${r.task.id}`;
+  out.dupes.push([hex(desc), res]);
+}
 
 const dir = path.join(__dirname, '..', 'vexlo-core', 'tests', 'fixtures');
 fs.mkdirSync(dir, { recursive: true });
