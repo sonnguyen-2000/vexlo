@@ -23,7 +23,7 @@ const pick = (a) => a[Math.floor(rnd() * a.length)];
 const POOL = ['a', 'B', 'z', '0', '9', ' ', ' ', '.', '.', '-', '_', '/', '\\', ':', '*', '?', '"', '<', '>', '|', '\t', '\n', 'é', 'ü', 'ệ', 'Ă', '日', '本', '\u00a0', '\u3000', '\ufffd', '\ufeff', '%', '%20', '%C3%A9', '%zz', '%E6%97%A5', ';', '=', "'", 'file', 'CON', 'nul', 'com1', 'LPT9', '.mp4', '.exe', '.zip', 'x'.repeat(40)];
 const randomString = (n) => { let s = ''; const k = 1 + Math.floor(rnd() * n); for (let i = 0; i < k; i++) { s += pick(POOL); } return s; };
 
-const out = { sanitize: [], cd: [], url: [], mime: [], web: [], pick: [], cat: [], plan: [], retry: [], sched: [], meter: [], classify: [], probe: [], proxy: [], bypass: [], urljoin: [], hls: [], variant: [], dash: [], dur: [], ytmedia: [], ytfmt: [], ytprog: [], yterr: [], tomin: [], dsched: [], limit: [], dupes: [] };
+const out = { sanitize: [], cd: [], url: [], mime: [], web: [], pick: [], cat: [], plan: [], retry: [], sched: [], meter: [], classify: [], probe: [], proxy: [], bypass: [], urljoin: [], hls: [], variant: [], dash: [], dur: [], ytmedia: [], ytfmt: [], ytprog: [], yterr: [], tomin: [], dsched: [], limit: [], dupes: [], ytinfo: [] };
 
 const sanitizeCases = ['', ' ', '...', 'a.b.c', 'CON', 'con.txt', 'com1', 'LPT1.log', 'COM0', 'a'.repeat(300) + '.mp4', '日本語'.repeat(80) + '.zip', 'x'.repeat(179) + '.verylongextension1234567890', 'file name . ', '  .hidden', 'a\u00a0\u00a0b', 'a:b*c?d"e<f>g|h', 'tab\there', '\ufffdabc\ufffd', '😀'.repeat(100) + '.mp4', '..a..', 'name.'];
 for (let i = 0; i < 400; i++) { sanitizeCases.push(randomString(12)); }
@@ -259,6 +259,32 @@ for (const c of progCases) { const r = ytdlp.parseProgress(c); out.ytprog.push([
 const errFrags = ['ERROR: [youtube] abc123: Sign in to confirm you’re not a bot', 'ERROR: [youtube] abc: Sign in to confirm youre not a bot', 'Use --cookies-from-browser', 'cookies are required for this', 'cookies\nrequired', 'Private video. Sign in', 'This video is private', 'Video unavailable', 'ERROR: [TikTok] 77: Unsupported URL: https://x', 'HTTP Error 429: Too Many Requests', 'rate-limited', 'rate limit', 'ffmpeg not found', 'ffprobe and ffmpeg are fine', 'No space left on device', 'Unable to extract nsig', 'HTTP Error 403: Forbidden', 'getaddrinfo failed', 'Connection reset by peer', 'connection refused', 'The account associated with this video has been terminated', 'account x terminated', 'Requested format is not available', 'ERROR: [generic] Something odd: details here', 'plain text line', '  ', '', 'Log in to continue', 'you must be 18', 'Members-only content', 'ERROR: first\nERROR: [x] y: second', 'WARNING: x\nlast line', 'error: lower case', 'x'.repeat(300), 'ERROR: [a:b] id-1_x:   spaced', 'ERROR: [] not tag: x', 'ERROR: é [bad tag'];
 for (const f of errFrags) { const r = ytdlp.friendlyError(f); out.yterr.push([hex(f), `${r.code}|${hex(r.message)}`]); }
 for (let i = 0; i < 300; i++) { const n = 1 + Math.floor(rnd() * 4); let t = ''; for (let j = 0; j < n; j++) { t += pick(errFrags) + pick(['\n', ' ', '', '\r\n']); } const r = ytdlp.friendlyError(t); out.yterr.push([hex(t), `${r.code}|${hex(r.message)}`]); }
+
+// ---- yt-dlp -J output -> title / extension / size
+const infoCases = [
+  { id: 'abc', title: 'Bài hát: thử/nghiệm?', extractor_key: 'Youtube', ext: 'webm', duration: 30, uploader: 'Kênh A', requested_formats: [{ filesize: 4000 }, { filesize: 1000 }] },
+  { id: 'x1', title: 'Single', ext: 'mp4', filesize: 5000 },
+  { id: 'x2', fulltitle: 'Only full', extractor: 'generic', channel: 'Chan', duration: '12.5', filesize_approx: 777.5 },
+  { id: 12345 },
+  { title: '', id: '', ext: '' },
+  { title: 'T', requested_formats: [], ext: 'mkv', filesize: 9 },
+  { title: 'T', requested_formats: [{ filesize: null, filesize_approx: 30 }, { filesize: 0, filesize_approx: 12 }, {}] },
+  { title: 'Playlist', entries: [{ title: 'First', id: 'f1', ext: 'flv', filesize: 10 }, { title: 'Second' }] },
+  { title: 'Empty entries', entries: [], ext: 'mov' },
+  { title: 'Null entry', entries: [null], ext: 'ogg' },
+  { title: 'Zero dur', duration: 0, uploader: '', channel: 'Ch' },
+  { title: 'Str size', filesize: '1234', duration: 'abc' },
+  { title: 'Neg', filesize: -5, duration: -3 },
+  { title: 'Unicode 日本語 😀', id: 'u', extractor_key: 'Niconico' },
+  { title: 'Fmt one', requested_formats: [{ filesize: 100 }], ext: 'webm' },
+];
+const infoTexts = infoCases.map((c) => JSON.stringify(c)).concat(['[]', '"text"', '42', 'null', '{', '', '{"title":"X"}', '{"title":null,"id":0}']);
+for (const t of infoTexts) {
+  for (const audio of [false, true]) {
+    const r = ytdlp.parseInfo(t, audio);
+    out.ytinfo.push([hex(t), audio ? '1' : '0', r ? [hex(r.title), hex(r.id), hex(r.site), hex(r.uploader), f64hex(r.duration), f64hex(r.total), hex(r.ext)].join('|') : '-']);
+  }
+}
 
 // ---- schedule
 for (const t of ['08:00', '8:00', '23:59', '24:00', '7:5', '', 'x', '00:00', '0:00', '12:30', ' 09:15 ', '19:60', '20:00', '1:00', '01:00', '001:00', '9:5a', ':30', '10:', '10:30:00', '\t7:07\n', '-1:00', '٣:٠٠']) { out.tomin.push([hex(t), String(schedule.toMinutes(t))]); }

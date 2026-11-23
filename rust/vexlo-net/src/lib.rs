@@ -6,6 +6,7 @@ pub mod download;
 pub mod error;
 pub mod fetch;
 pub mod segmented;
+pub mod ytdlp;
 pub mod limiter;
 pub mod probe;
 

@@ -11,3 +11,4 @@ tokio = { version = "1", features = ["rt-multi-thread", "macros", "time", "sync"
 reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "stream", "socks"] }
 futures-util = "0.3"
 aes = "0.8"
+serde_json = "1"
