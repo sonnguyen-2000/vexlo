@@ -2,7 +2,7 @@ name: rust-core
 # Checks the Rust port (rust/) on every push that touches it. The release workflow is unchanged.
 on:
   push:
-    paths: ['rust/**', '.github/workflows/rust.yml', 'src/core/util.js', 'src/core/category.js', 'src/core/hls.js', 'src/core/dash.js', 'src/core/download.js', 'src/core/http.js', 'src/core/limiter.js', 'src/core/schedule.js', 'src/core/dupes.js', 'src/core/ytdlp.js']
+    paths: ['rust/**', '.github/workflows/rust.yml', 'src/core/util.js', 'src/core/category.js', 'src/core/hls.js', 'src/core/dash.js', 'src/core/download.js', 'src/core/http.js', 'src/core/limiter.js', 'src/core/schedule.js', 'src/core/dupes.js', 'src/core/ytdlp.js', 'src/core/manager.js', 'src/core/stats.js']
   pull_request:
     paths: ['rust/**']
 jobs:

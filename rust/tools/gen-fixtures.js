@@ -1,4 +1,5 @@
 'use strict';
+process.env.TZ = 'Etc/GMT-7';
 // Runs the original JavaScript helpers over many inputs and writes the results to
 // vexlo-core/tests/fixtures/*.tsv. The Rust tests (tests/differential.rs) must give the same answers.
 // Fields are hex-encoded UTF-8 so tabs and newlines in inputs are safe.
@@ -14,6 +15,10 @@ const dash = require('../../src/core/dash');
 const ytdlp = require('../../src/core/ytdlp');
 const schedule = require('../../src/core/schedule');
 const { findDuplicate } = require('../../src/core/dupes');
+const { DownloadManager, detectKind } = require('../../src/core/manager');
+const { Stats } = require('../../src/core/stats');
+const { EventEmitter } = require('events');
+const os = require('os');
 
 const hex = (s) => Buffer.from(String(s), 'utf8').toString('hex');
 let seed = 12345;
@@ -23,7 +28,7 @@ const pick = (a) => a[Math.floor(rnd() * a.length)];
 const POOL = ['a', 'B', 'z', '0', '9', ' ', ' ', '.', '.', '-', '_', '/', '\\', ':', '*', '?', '"', '<', '>', '|', '\t', '\n', 'é', 'ü', 'ệ', 'Ă', '日', '本', '\u00a0', '\u3000', '\ufffd', '\ufeff', '%', '%20', '%C3%A9', '%zz', '%E6%97%A5', ';', '=', "'", 'file', 'CON', 'nul', 'com1', 'LPT9', '.mp4', '.exe', '.zip', 'x'.repeat(40)];
 const randomString = (n) => { let s = ''; const k = 1 + Math.floor(rnd() * n); for (let i = 0; i < k; i++) { s += pick(POOL); } return s; };
 
-const out = { sanitize: [], cd: [], url: [], mime: [], web: [], pick: [], cat: [], plan: [], retry: [], sched: [], meter: [], classify: [], probe: [], proxy: [], bypass: [], urljoin: [], hls: [], variant: [], dash: [], dur: [], ytmedia: [], ytfmt: [], ytprog: [], yterr: [], tomin: [], dsched: [], limit: [], dupes: [], ytinfo: [] };
+const out = { sanitize: [], cd: [], url: [], mime: [], web: [], pick: [], cat: [], plan: [], retry: [], sched: [], meter: [], classify: [], probe: [], proxy: [], bypass: [], urljoin: [], hls: [], variant: [], dash: [], dur: [], ytmedia: [], ytfmt: [], ytprog: [], yterr: [], tomin: [], dsched: [], limit: [], dupes: [], ytinfo: [], qkind: [], queue: [], limits: [], stats: [] };
 
 const sanitizeCases = ['', ' ', '...', 'a.b.c', 'CON', 'con.txt', 'com1', 'LPT1.log', 'COM0', 'a'.repeat(300) + '.mp4', '日本語'.repeat(80) + '.zip', 'x'.repeat(179) + '.verylongextension1234567890', 'file name . ', '  .hidden', 'a\u00a0\u00a0b', 'a:b*c?d"e<f>g|h', 'tab\there', '\ufffdabc\ufffd', '😀'.repeat(100) + '.mp4', '..a..', 'name.'];
 for (let i = 0; i < 400; i++) { sanitizeCases.push(randomString(12)); }
@@ -337,6 +342,142 @@ for (let i = 0; i < 400; i++) {
   out.dupes.push([hex(desc), res]);
 }
 
-const dir = path.join(__dirname, '..', 'vexlo-core', 'tests', 'fixtures');
-fs.mkdirSync(dir, { recursive: true });
-for (const [name, rows] of Object.entries(out)) { fs.writeFileSync(path.join(dir, name + '.tsv'), rows.map((r) => r.join('\t')).join('\n') + '\n'); console.log(name, rows.length); }
+
+// ---- queue: detect kind, then scripted scenarios run on the real DownloadManager with downloads that never touch the network
+const kindUrls = ['https://a.com/x.zip', 'https://a.com/list.m3u8', 'https://a.com/list.M3U8?token=1', 'https://a.com/list.m3u', 'https://a.com/list.m3u8x', 'https://a.com/v.mpd', 'https://a.com/V.MPD#x', 'https://a.com/dir.mpd/file',
+  'https://www.youtube.com/watch?v=abc', 'https://youtu.be/abc', 'https://www.tiktok.com/@u/video/123', 'https://www.facebook.com/watch/?v=1', 'https://www.instagram.com/reel/abc/', 'https://a.com/', 'https://a.com', 'x', '', 'https://a.com/%2Em3u8', 'https://a.com/a%20b.m3u8'];
+for (const u of kindUrls) { for (const h of ['', 'hls', 'dash', 'file', 'media', 'other']) { out.qkind.push([hex(u), h || '~', detectKind(u, h || undefined)]); } }
+
+class FakeDl extends EventEmitter {
+  constructor(state, log) { super(); this.state = state; this.log = log; }
+  async start() { if (this.state.status === 'done' || this.state.status === 'downloading') { return; } this.state.status = 'downloading'; this.log.push(this.state.id); }
+  async pause() { if (this.state.status === 'downloading' || this.state.status === 'queued') { this.state.status = 'paused'; } }
+  async cancel() { /* nothing to stop */ }
+  progress() { return { speed: 0, eta: 0, connections: 0 }; }
+}
+const uuid = (n) => `00000000-0000-0000-0000-${String(n).padStart(12, '0')}`;
+const LABELS = 'abcdefghij';
+
+async function queueFixtures() {
+  for (let sc = 0; sc < 220; sc++) {
+    const maxc = pick([1, 1, 2, 3, 4]);
+    const m = new DownloadManager({ dataDir: os.tmpdir(), downloadDir: os.tmpdir(), maxConcurrent: maxc });
+    m._scheduleSave = () => {}; m.saveNow = () => {};
+    m.on('error', () => {}); m.on('warn', () => {});
+    const log = [];
+    m._makeDl = (state) => new FakeDl(state, log);
+    const ids = {}; const used = []; const ops = []; const trace = [];
+    const stOf = (l) => { const t = m.tasks.get(ids[l]); return t ? t.state : null; };
+    const labelOf = (id) => LABELS[Number(id.slice(-12))];
+    const alive = () => used.filter((l) => m.tasks.has(ids[l]));
+    const snap = () => [...m.tasks.values()].map((t) => `${labelOf(t.state.id)}:${t.state.status}:${t.priority || 0}`).join(',');
+    const exec = async (op) => {
+      const [c, a, b, d] = op.split(':'); let res = '';
+      if (c === 'A' || c === 'S') {
+        if (!(a in ids)) { used.push(a); ids[a] = uuid(LABELS.indexOf(a)); }
+        m.add({ id: ids[a], url: 'https://a.com/x', kind: b, start: c === 'A' });
+      } else if (c === 'T' || c === 'B') { res = String(m.prioritize((a ? a.split(',') : []).map((l) => ids[l]), c === 'B' ? 'bottom' : 'top')); }
+      else if (c === 'D' || c === 'E') { const t = m.tasks.get(ids[a]); t.state.status = c === 'D' ? 'done' : 'error'; t.dl.emit(c === 'D' ? 'done' : 'error'); }
+      else if (c === 'P') { await m.pause(ids[a]); }
+      else if (c === 'R') { m.resume(ids[a]); }
+      else if (c === 'X') { await m.remove(ids[a]); }
+      else if (c === 'M') { m.setMaxConcurrent(Number(a)); }
+      else if (c === 'Z') { m.resumeAll(); }
+      else if (c === 'W') { const s = stOf(a); if (s) { s.downloaded = Number(b); s.size = Number(d); } }
+      else if (c === 'L') { res = String(m.relink(ids[a], { url: b === '1' ? 'https://a.com/new' : 'ftp://nope', size: Number(d) })); }
+      else if (c === 'U') { const s = stOf(a); if (s) { s.connections = 3; } m.update(ids[a], { connections: 5 }); res = s ? String(s.connections) : '-'; }
+      return res;
+    };
+    const nOps = 10 + Math.floor(rnd() * 25);
+    for (let k = 0; k < nOps; k++) {
+      const al = alive(); const pickL = () => (al.length ? pick(al) : 'a');
+      const r = rnd(); let op;
+      if ((r < 0.3 || al.length === 0) && used.length < LABELS.length) {
+        op = `${rnd() < 0.85 ? 'A' : 'S'}:${LABELS[used.length]}:${pick(['file', 'file', 'file', 'hls', 'dash', 'media'])}`;
+      } else if (r < 0.42) { op = `${rnd() < 0.4 ? 'B' : 'T'}:${al.filter(() => rnd() < 0.5).join(',')}`; }
+      else if (r < 0.56) {
+        const dl = al.filter((l) => stOf(l).status === 'downloading');
+        if (!dl.length) { continue; }
+        op = `${rnd() < 0.75 ? 'D' : 'E'}:${pick(dl)}`;
+      } else if (r < 0.66) { op = `P:${pickL()}`; }
+      else if (r < 0.78) { op = `R:${pickL()}`; }
+      else if (r < 0.84) { op = `X:${pickL()}`; }
+      else if (r < 0.88) { op = `M:${pick([0, 1, 2, 5, 3])}`; }
+      else if (r < 0.91) { op = 'Z'; }
+      else if (r < 0.95) { op = `W:${pickL()}:${pick([0, 0, 500, 1000])}:${pick([0, 1000, 5000])}`; }
+      else if (r < 0.98) { op = `L:${pickL()}:${rnd() < 0.85 ? 1 : 0}:${pick([0, 1000, 5000])}`; }
+      else { op = `U:${pickL()}`; }
+      log.length = 0;
+      const res = await exec(op);
+      ops.push(op);
+      trace.push(`${log.map(labelOf).join('+') || '-'}/${res}/${snap()}`);
+    }
+    out.queue.push([hex(`${maxc}|${ops.join(' ')}`), hex(trace.join(';'))]);
+  }
+
+  // limits and connection counts
+  const lm = new DownloadManager({ dataDir: os.tmpdir(), downloadDir: os.tmpdir() });
+  lm._scheduleSave = () => {}; lm.saveNow = () => {};
+  const id1 = lm.add({ id: uuid(1), url: 'https://a.com/x', start: false });
+  for (const kb of [0, -5, 1.5, 2.5, 0.4, 0.5, 99.5, 1024, 1e9, 10 * 1024 * 1024, 10 * 1024 * 1024 + 1, NaN, Infinity, -Infinity]) {
+    lm.setTaskLimit([id1], kb);
+    out.limits.push(['task', String(kb), String(lm.tasks.get(id1).state.limitKB)]);
+  }
+  for (const x of [1, 5, 32, 33, 100, -3, 0, 7]) {
+    const mm = new DownloadManager({ dataDir: os.tmpdir(), downloadDir: os.tmpdir() });
+    mm._scheduleSave = () => {}; mm.saveNow = () => {};
+    const id = mm.add({ id: uuid(2), url: 'https://a.com/x', start: false });
+    mm.update(id, { connections: x });
+    out.limits.push(['conn', String(x), String(mm.tasks.get(id).state.connections)]);
+  }
+  const orig = DownloadManager.prototype._makeDl;
+  for (const own of [0, 100, 500, 2048, 10000]) {
+    for (const glob of [0, 1024, 1500, 1535, 1536, 50 * 1024, 512 * 1024, 10 * 1024 * 1024]) {
+      const mm = new DownloadManager({ dataDir: os.tmpdir(), downloadDir: os.tmpdir(), speedLimit: glob });
+      mm._scheduleSave = () => {}; mm.saveNow = () => {};
+      const id = mm.add({ id: uuid(3), url: 'https://www.youtube.com/watch?v=abc', start: false });
+      const st = mm.tasks.get(id).state; st.limitKB = own;
+      out.limits.push(['media', `${own},${glob}`, String(orig.call(mm, st).deps.getLimitKB())]);
+    }
+  }
+}
+
+// ---- statistics
+function statsFixtures() {
+  const hostPool = ['a.com', 'b.org', 'cdn.c.net', '', 'x'.repeat(150), 'é.com', 'd.io', 'e.io'];
+  const typePool = ['video', 'archive', 'other', 'music', 'y'.repeat(30), 'document', ''];
+  const bytesPool = [0, 1, 1000, 123456, 12.7, 0.9, -5, NaN, 1e12, 5e9, 2 ** 40];
+  const tmp = path.join(os.tmpdir(), 'vexlo-stats-fixture.json');
+  const nowBase = Date.UTC(2026, 10, 23, 12, 0, 0);
+  const edge = [0, 1, 17 * 3600 * 1000 - 1, 17 * 3600 * 1000, 17 * 3600 * 1000 + 1]; // around local midnight (UTC+7)
+  for (let sc = 0; sc < 120; sc++) {
+    const s = new Stats(tmp);
+    s.data = { days: {}, hosts: {}, types: {}, total: { bytes: 0, count: 0 }, since: 1000 };
+    s._schedule = () => {}; s.saveNow = () => {};
+    const recs = []; const n = sc < 4 ? 400 : 1 + Math.floor(rnd() * 25);
+    for (let i = 0; i < n; i++) {
+      const at = sc % 5 === 0 ? nowBase - Math.floor(rnd() * 450) * 86400000 - pick(edge) : nowBase - Math.floor(rnd() * 20 * 86400000);
+      const host = sc < 4 ? `host${i}.com` : pick(hostPool);
+      const bytes = pick(bytesPool);
+      const type = pick(typePool);
+      recs.push(`${bytes}~${hex(host)}~${hex(type)}~${at}`);
+      s.record({ bytes, host, type, at });
+    }
+    const now = nowBase + pick([0, 3600000, 5 * 86400000, 40 * 86400000]);
+    const nDays = pick([14, 14, 7, 30]);
+    const r = s.summary(now, nDays);
+    const t = (x) => `${x.bytes},${x.count}`;
+    const list = (a) => a.map((e) => `${hex(e.name)},${e.bytes},${e.count}`).join(';');
+    const line = [t(r.today), t(r.week), t(r.month), t(r.total), r.since, r.days.map((d) => `${d.date},${d.bytes},${d.count}`).join(';'), list(r.hosts), list(r.types)].join('|');
+    out.stats.push([`${now},${nDays}`, recs.join(';'), line]);
+  }
+}
+
+async function main() {
+  await queueFixtures();
+  statsFixtures();
+  const dir = path.join(__dirname, '..', 'vexlo-core', 'tests', 'fixtures');
+  fs.mkdirSync(dir, { recursive: true });
+  for (const [name, rows] of Object.entries(out)) { fs.writeFileSync(path.join(dir, name + '.tsv'), rows.map((r) => r.join('\t')).join('\n') + '\n'); console.log(name, rows.length); }
+}
+main().catch((e) => { console.error(e); process.exit(1); });

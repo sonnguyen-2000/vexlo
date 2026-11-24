@@ -9,5 +9,6 @@ pub mod segmented;
 pub mod ytdlp;
 pub mod limiter;
 pub mod probe;
+pub mod store;
 
 pub use error::NetError;

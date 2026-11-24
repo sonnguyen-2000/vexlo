@@ -512,3 +512,108 @@ fn duplicates_match_js() {
     }
     report(bad);
 }
+
+#[test]
+fn detect_kind_matches_js() {
+    let mut bad = vec![];
+    for r in rows("qkind") {
+        let url = unhex(&r[0]);
+        let hint = if r[1] == "~" { "" } else { r[1].as_str() };
+        check("qkind", vexlo_core::queue::detect_kind(&url, hint), &r[2], &format!("{} / {}", url, hint), &mut bad);
+    }
+    report(bad);
+}
+
+#[test]
+fn queue_scenarios_match_js() {
+    use vexlo_core::queue::Queue;
+    let mut bad = vec![];
+    for r in rows("queue") {
+        let desc = unhex(&r[0]);
+        let want = unhex(&r[1]);
+        let (maxc, ops) = desc.split_once('|').unwrap();
+        let mut q = Queue::new(maxc.parse().unwrap());
+        let mut trace: Vec<String> = vec![];
+        for op in ops.split(' ').filter(|o| !o.is_empty()) {
+            let f: Vec<&str> = op.split(':').collect();
+            let mut res = String::new();
+            let started: Vec<String> = match f[0] {
+                "A" | "S" => q.add(f[1], f[2], f[0] == "A"),
+                "T" | "B" => {
+                    let ids: Vec<&str> = f[1].split(',').filter(|x| !x.is_empty()).collect();
+                    let (n, st) = q.prioritize(&ids, f[0] == "B");
+                    res = n.to_string();
+                    st
+                }
+                "D" => q.finished(f[1], true),
+                "E" => q.finished(f[1], false),
+                "P" => {
+                    if q.pause(f[1]) { q.stopped(f[1]); }
+                    q.pump()
+                }
+                "R" => q.resume(f[1]),
+                "X" => q.remove(f[1]),
+                "M" => q.set_max_concurrent(f[1].parse().unwrap()),
+                "Z" => q.resume_all(),
+                "W" => {
+                    if let Some(e) = q.get_mut(f[1]) { e.downloaded = f[2].parse().unwrap(); e.size = f[3].parse().unwrap(); }
+                    vec![]
+                }
+                "L" => {
+                    let (ok, st) = q.relink(f[1], f[2] == "1", f[3].parse().unwrap());
+                    res = ok.to_string();
+                    st
+                }
+                "U" => {
+                    res = if q.get(f[1]).is_none() { "-".into() } else if q.can_update(f[1]) { vexlo_core::queue::clamp_connections(5.0, 3).to_string() } else { "3".into() };
+                    vec![]
+                }
+                other => panic!("unknown op {}", other),
+            };
+            let snap: Vec<String> = q.entries.iter().map(|e| format!("{}:{}:{}", e.id, e.status.as_str(), e.priority)).collect();
+            trace.push(format!("{}/{}/{}", if started.is_empty() { "-".to_string() } else { started.join("+") }, res, snap.join(",")));
+        }
+        check("queue", &trace.join(";"), &want, &desc, &mut bad);
+    }
+    report(bad);
+}
+
+#[test]
+fn limits_match_js() {
+    use vexlo_core::queue::{clamp_connections, clamp_task_limit, media_limit_kb};
+    let mut bad = vec![];
+    for r in rows("limits") {
+        let got = match r[0].as_str() {
+            "task" => clamp_task_limit(r[1].parse::<f64>().unwrap_or(f64::NAN)).to_string(),
+            "conn" => clamp_connections(r[1].parse().unwrap(), 8).to_string(),
+            "media" => {
+                let (a, b) = r[1].split_once(',').unwrap();
+                media_limit_kb(a.parse().unwrap(), b.parse().unwrap()).to_string()
+            }
+            other => panic!("unknown limits row {}", other),
+        };
+        check(&format!("limits/{}", r[0]), &got, &r[2], &r[1], &mut bad);
+    }
+    report(bad);
+}
+
+#[test]
+fn stats_match_js() {
+    use vexlo_core::stats::{StatsData, Tally};
+    let mut bad = vec![];
+    let t = |x: Tally| format!("{},{}", x.bytes, x.count);
+    let list = |v: &[(String, Tally)]| v.iter().map(|(n, x)| format!("{},{},{}", hx(n), x.bytes, x.count)).collect::<Vec<_>>().join(";");
+    for r in rows("stats") {
+        let (now, n_days) = r[0].split_once(',').unwrap();
+        let mut d = StatsData::new(1000);
+        for rec in r[1].split(';').filter(|x| !x.is_empty()) {
+            let f: Vec<&str> = rec.split('~').collect();
+            d.record(f[0].parse::<f64>().unwrap(), &unhex(f[1]), &unhex(f[2]), f[3].parse().unwrap(), 420);
+        }
+        let s = d.summary(now.parse().unwrap(), n_days.parse().unwrap(), 420);
+        let days = s.days.iter().map(|x| format!("{},{},{}", x.date, x.bytes, x.count)).collect::<Vec<_>>().join(";");
+        let got = [t(s.today), t(s.week), t(s.month), t(s.total), s.since.to_string(), days, list(&s.hosts), list(&s.types)].join("|");
+        check("stats", &got, &r[2], &r[0], &mut bad);
+    }
+    report(bad);
+}
