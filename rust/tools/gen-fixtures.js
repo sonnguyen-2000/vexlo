@@ -28,7 +28,7 @@ const pick = (a) => a[Math.floor(rnd() * a.length)];
 const POOL = ['a', 'B', 'z', '0', '9', ' ', ' ', '.', '.', '-', '_', '/', '\\', ':', '*', '?', '"', '<', '>', '|', '\t', '\n', 'é', 'ü', 'ệ', 'Ă', '日', '本', '\u00a0', '\u3000', '\ufffd', '\ufeff', '%', '%20', '%C3%A9', '%zz', '%E6%97%A5', ';', '=', "'", 'file', 'CON', 'nul', 'com1', 'LPT9', '.mp4', '.exe', '.zip', 'x'.repeat(40)];
 const randomString = (n) => { let s = ''; const k = 1 + Math.floor(rnd() * n); for (let i = 0; i < k; i++) { s += pick(POOL); } return s; };
 
-const out = { sanitize: [], cd: [], url: [], mime: [], web: [], pick: [], cat: [], plan: [], retry: [], sched: [], meter: [], classify: [], probe: [], proxy: [], bypass: [], urljoin: [], hls: [], variant: [], dash: [], dur: [], ytmedia: [], ytfmt: [], ytprog: [], yterr: [], tomin: [], dsched: [], limit: [], dupes: [], ytinfo: [], qkind: [], queue: [], limits: [], stats: [] };
+const out = { sanitize: [], cd: [], url: [], mime: [], web: [], pick: [], cat: [], plan: [], retry: [], sched: [], meter: [], classify: [], probe: [], proxy: [], bypass: [], urljoin: [], hls: [], variant: [], dash: [], dur: [], ytmedia: [], ytfmt: [], ytprog: [], yterr: [], tomin: [], dsched: [], limit: [], dupes: [], ytinfo: [], qkind: [], queue: [], limits: [], stats: [], api: [], apihdr: [], apicim: [] };
 
 const sanitizeCases = ['', ' ', '...', 'a.b.c', 'CON', 'con.txt', 'com1', 'LPT1.log', 'COM0', 'a'.repeat(300) + '.mp4', '日本語'.repeat(80) + '.zip', 'x'.repeat(179) + '.verylongextension1234567890', 'file name . ', '  .hidden', 'a\u00a0\u00a0b', 'a:b*c?d"e<f>g|h', 'tab\there', '\ufffdabc\ufffd', '😀'.repeat(100) + '.mp4', '..a..', 'name.'];
 for (let i = 0; i < 400; i++) { sanitizeCases.push(randomString(12)); }
@@ -473,9 +473,72 @@ function statsFixtures() {
   }
 }
 
+
+// ---- local API: the real server (src/core/api.js) is started with a stub manager and asked many different questions over HTTP
+async function apiFixtures() {
+  const http = require('http');
+  const { createApi, sanitizeHeaders } = require('../../src/core/api');
+  const stub = new EventEmitter();
+  stub.list = () => []; stub.get = (id) => (id === 'known' ? {} : null); stub.add = () => 'new-id'; stub.pause = async () => {}; stub.resume = () => {}; stub.remove = async () => {};
+  const call = (port, o) => new Promise((resolve) => {
+    const headers = {};
+    if (o.host !== null) { headers.host = o.host.replace('{port}', port); }
+    if (o.origin !== null) { headers.origin = o.origin; }
+    if (o.token !== null) { headers['x-vexlo-token'] = o.token; }
+    const body = o.method === 'POST' ? '{}' : '';
+    if (body) { headers['content-type'] = 'application/json'; headers['content-length'] = Buffer.byteLength(body); }
+    const req = http.request({ host: '127.0.0.1', port, path: o.path, method: o.method, headers, setHost: false }, (res) => {
+      const acao = res.headers['access-control-allow-origin'] || '-';
+      const acah = res.headers['access-control-allow-headers'] || '-';
+      if (res.headers['content-type'] && res.headers['content-type'].startsWith('text/event-stream')) { res.destroy(); req.destroy(); resolve(`${res.statusCode}|sse|${acao}|${acah}`); return; }
+      const chunks = []; res.on('data', (c) => chunks.push(c));
+      res.on('end', () => { let err = 'ok'; try { const j = JSON.parse(Buffer.concat(chunks).toString('utf8') || '{}'); if (j.error) { err = j.error; } } catch { err = 'bad'; } resolve(`${res.statusCode}|${err}|${acao}|${acah}`); });
+    });
+    req.on('error', (e) => resolve(`err|${e.code}`));
+    req.end(body);
+  });
+  const hosts = ['{port}', '127.0.0.1:{port}', 'localhost:{port}', '[::1]:{port}', 'LOCALHOST:{port}', '127.0.0.1:1', 'evil.com', 'localhost', '127.0.0.1:{port}.evil.com', ''];
+  const origins = [null, 'moz-extension://abc', 'chrome-extension://xyz', 'extension://q', 'MOZ-EXTENSION://ABC', 'https://evil.com', 'null', 'moz-extension:/x', 'http://127.0.0.1', ' moz-extension://abc'];
+  const tokens = [null, 'secret', 'wrong', ''];
+  const methods = ['GET', 'POST', 'OPTIONS', 'PUT', 'DELETE'];
+  const paths = ['/api/ping', '/api/list', '/api/refresh', '/api/settings', '/api/events', '/api/add', '/api/tasks/known/pause', '/api/tasks/known/resume', '/api/tasks/known/remove', '/api/tasks/other-1/pause', '/api/tasks/ab_c/bogus', '/api/tasks//pause', '/api/ping/', '/API/ping', '/api/ping?x=1', '/api/list#frag', '/', '/api', '/api/tasks/known', '/api/tasks/a%20b/pause', '/api/./ping', '/api/x/../list', '//api/ping', '/api/tasks/known/pause?force=1', '/api/tasks/KNOWN/pause'];
+  for (const serverToken of ['secret', '']) {
+    const api = createApi(stub, { port: 0, token: serverToken, getSettings: () => ({}), getRefreshPending: () => [] });
+    const port = await api.listen();
+    const cases = [];
+    for (let i = 0; i < 900; i++) {
+      cases.push({ host: pick(i % 5 === 0 ? hosts : ['127.0.0.1:{port}', 'localhost:{port}', '[::1]:{port}']), origin: pick(i % 2 === 0 ? origins : [null, 'moz-extension://abc', 'chrome-extension://xyz']), token: pick(i % 2 === 0 ? tokens : ['secret', 'secret', 'wrong']), method: pick(i % 3 === 0 ? methods : ['GET', 'POST', 'OPTIONS']), path: pick(paths) });
+    }
+    for (const c of cases) {
+      const res = await call(port, c);
+      out.api.push([hex([serverToken, c.host === null ? '~' : c.host, c.origin === null ? '~' : c.origin, c.token === null ? '~' : c.token, c.method, c.path].join('\n')), hex(res)]);
+    }
+    await api.close();
+  }
+  // header filter
+  const names = ['cookie', 'Referer', 'USER-AGENT', 'X-Other', 'authorization', 'Origin', 'accept-language', 'Host', 'Cookie', 'content-type'];
+  const vals = ['a=b', 'https://x.com/', 'Mozilla/5.0', '', 'line\r\nbreak', 'cr\rhere', 'lf\nhere', 'é ü 日本', 'z'.repeat(15999), 'z'.repeat(16000), 5, null, true];
+  for (let i = 0; i < 300; i++) {
+    const h = {}; const keys = []; const n = Math.floor(rnd() * 6);
+    for (let j = 0; j < n; j++) { const k = pick(names); const v = pick(vals); h[k] = v; keys.push(k); }
+    const enc = Object.entries(h).map(([k, v]) => `${hex(k)}=${typeof v === 'string' ? 's' + hex(v) : 'n'}`).join(';');
+    const res = sanitizeHeaders(h);
+    out.apihdr.push([enc || '-', Object.entries(res).map(([k, v]) => `${hex(k)}=${hex(v)}`).join(';') || '-']);
+  }
+  // PowerShell launch command of native/host.js (startViaCim): the same template, encoded the same way
+  const q = (v) => "'" + String(v).replace(/'/g, "''") + "'";
+  for (const exe of ['C:\\Program Files\\Vexlo\\Vexlo.exe', "D:\\it's here\\Vexlo.exe", 'C:\\Users\\Zoë\\App Data\\日本\\Vexlo.exe', 'x']) {
+    const dirp = require('path').win32.dirname(exe);
+    const script = `$r = Invoke-CimMethod -ClassName Win32_Process -MethodName Create -Arguments @{ CommandLine = ${q('"' + exe + '" --hidden')}; CurrentDirectory = ${q(dirp)} }; exit ([int]$r.ReturnValue)`;
+    out.apicim.push([hex(exe), hex(dirp), Buffer.from(script, 'utf16le').toString('base64')]);
+  }
+  for (const odd of [null, undefined, 'x', 5, []]) { out.apihdr.push([`odd:${odd === null ? 'null' : typeof odd}`, Object.keys(sanitizeHeaders(odd)).length === 0 ? '-' : 'x']); }
+}
+
 async function main() {
   await queueFixtures();
   statsFixtures();
+  await apiFixtures(); // last: it draws random numbers too, and the fixtures above must not change
   const dir = path.join(__dirname, '..', 'vexlo-core', 'tests', 'fixtures');
   fs.mkdirSync(dir, { recursive: true });
   for (const [name, rows] of Object.entries(out)) { fs.writeFileSync(path.join(dir, name + '.tsv'), rows.map((r) => r.join('\t')).join('\n') + '\n'); console.log(name, rows.length); }

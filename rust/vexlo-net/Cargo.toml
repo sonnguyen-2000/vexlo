@@ -7,7 +7,7 @@ license = "MIT"
 
 [dependencies]
 vexlo-core = { path = "../vexlo-core" }
-tokio = { version = "1", features = ["rt-multi-thread", "macros", "time", "sync", "fs", "io-util", "net", "process"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "time", "sync", "fs", "io-util", "net", "process", "io-std"] }
 reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "stream", "socks"] }
 futures-util = "0.3"
 aes = "0.8"

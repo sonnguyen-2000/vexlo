@@ -617,3 +617,57 @@ fn stats_match_js() {
     }
     report(bad);
 }
+
+#[test]
+fn api_gate_and_routes_match_js() {
+    use vexlo_core::api::{handle_head, Config, Outcome, Route};
+    const PORT: u16 = 40123;
+    let mut bad = vec![];
+    for r in rows("api") {
+        let desc = unhex(&r[0]);
+        let want = unhex(&r[1]);
+        let f: Vec<&str> = desc.split('\n').collect();
+        let opt = |s: &str| if s == "~" { None } else { Some(s.replace("{port}", &PORT.to_string())) };
+        let host = opt(f[1]);
+        // an HTTP parser trims the spaces around header values
+        let origin = opt(f[2]).map(|s| s.trim().to_string());
+        let token = opt(f[3]).map(|s| s.trim().to_string());
+        let cfg = Config { port: PORT, token: f[0] };
+        let got = match handle_head(f[4], f[5], host.as_deref(), origin.as_deref(), token.as_deref(), &cfg) {
+            Outcome::Reject { status, error } => format!("{}|{}|-|-", status, error),
+            Outcome::Preflight { origin } => format!("204|ok|{}|{}", origin.clone().unwrap_or("-".into()), if origin.is_some() { "content-type, x-vexlo-token" } else { "-" }),
+            Outcome::Dispatch { route, origin } => {
+                let (status, err) = match route {
+                    Route::NotFound => (404, "not found"),
+                    Route::Task { ref id, .. } if id != "known" => (404, "not found"),
+                    Route::Events => (200, "sse"),
+                    _ => (200, "ok"),
+                };
+                format!("{}|{}|{}|{}", status, err, origin.clone().unwrap_or("-".into()), if origin.is_some() { "content-type, x-vexlo-token" } else { "-" })
+            }
+        };
+        check("api", &got, &want, &desc.replace('\n', " | "), &mut bad);
+    }
+    report(bad);
+}
+
+#[test]
+fn sanitize_headers_matches_js() {
+    use vexlo_core::api::{sanitize_headers, HeaderValue};
+    let mut bad = vec![];
+    for r in rows("apihdr") {
+        if r[0].starts_with("odd:") {
+            continue; // not-an-object inputs: Rust takes a list, so there is nothing to filter
+        }
+        let input: Vec<(String, HeaderValue)> = if r[0] == "-" { vec![] } else {
+            r[0].split(';').map(|p| {
+                let (k, v) = p.split_once('=').unwrap();
+                (unhex(k), if v == "n" { HeaderValue::Other } else { HeaderValue::Text(unhex(&v[1..])) })
+            }).collect()
+        };
+        let got = sanitize_headers(&input);
+        let got = if got.is_empty() { "-".to_string() } else { got.iter().map(|(k, v)| format!("{}={}", hx(k), hx(v))).collect::<Vec<_>>().join(";") };
+        check("apihdr", &got, &r[1], &r[0], &mut bad);
+    }
+    report(bad);
+}
