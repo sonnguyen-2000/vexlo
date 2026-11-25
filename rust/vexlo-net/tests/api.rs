@@ -34,14 +34,14 @@ impl ApiBackend for Fake {
     fn exists(&self, id: &str) -> bool {
         id == "known"
     }
-    fn add(&self, items: Vec<Value>, show: bool) -> Vec<Value> {
+    fn add(&self, items: Vec<Value>, show: bool) -> Result<Vec<Value>, String> {
         let n = items.len();
         self.added.lock().unwrap().extend(items);
         self.calls
             .lock()
             .unwrap()
             .push(format!("add show={}", show));
-        (0..n).map(|i| json!(format!("id{}", i))).collect()
+        Ok((0..n).map(|i| json!(format!("id{}", i))).collect())
     }
     fn pause(&self, id: &str) -> BoxFuture<'static, ()> {
         self.calls.lock().unwrap().push(format!("pause {}", id));

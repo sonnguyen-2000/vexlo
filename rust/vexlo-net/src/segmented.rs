@@ -4,6 +4,7 @@ use crate::download::{Download, DownloadState, Status};
 use crate::error::NetError;
 use crate::fetch::fetch_bytes;
 use crate::limiter::TaskLimiter;
+use crate::resolve::ResolvePath;
 use aes::cipher::generic_array::GenericArray;
 use aes::cipher::{BlockDecrypt, KeyInit};
 use aes::Aes128;
@@ -156,6 +157,7 @@ struct Shared {
     inner: Mutex<Inner>,
     client: reqwest::Client,
     limiter: Arc<TaskLimiter>,
+    resolve: Mutex<Option<ResolvePath>>,
     ffmpeg: PathBuf,
     /// 0 = running, 1 = paused, 2 = cancelled, 3 = failed
     halt: watch::Sender<u8>,
@@ -258,6 +260,7 @@ impl SegmentedDownload {
                 }),
                 client,
                 limiter,
+                resolve: Mutex::new(None),
                 ffmpeg,
                 halt,
                 failure: Mutex::new(None),
@@ -341,6 +344,11 @@ impl SegmentedDownload {
 
     fn set_phase(&self, phase: &str) {
         self.sh.inner.lock().unwrap().phase = phase.to_string();
+    }
+
+    /// Choose the file name through this function (see `ResolvePath`) instead of only looking at the disk.
+    pub fn set_resolver(&self, f: ResolvePath) {
+        *self.sh.resolve.lock().unwrap() = Some(f);
     }
 
     pub fn pause(&self) {
@@ -445,6 +453,7 @@ impl SegmentedDownload {
     }
 
     fn prepare_names(&self) {
+        let resolve = self.sh.resolve.lock().unwrap().clone();
         let mut g = self.sh.inner.lock().unwrap();
         if g.st.filename.is_empty() {
             let n = filename_from_url(&g.st.url);
@@ -463,7 +472,10 @@ impl SegmentedDownload {
             g.st.filename.push_str(".mp4");
         }
         if g.st.path.as_os_str().is_empty() {
-            let p = unique_path(&g.st.dir, &g.st.filename, &HashSet::new());
+            let p = match &resolve {
+                Some(f) => f(&g.st.dir, &g.st.filename),
+                None => unique_path(&g.st.dir, &g.st.filename, &HashSet::new()),
+            };
             g.st.filename = p.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_else(|| g.st.filename.clone());
             g.st.path = p;
         }

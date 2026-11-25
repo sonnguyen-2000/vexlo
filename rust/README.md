@@ -18,7 +18,8 @@ After changing the JS helpers run `node rust/tools/gen-fixtures.js` and commit t
 | 3a | Schedule, duplicate detection | `schedule.js`, `dupes.js` | done |
 | 3b | Queue rules (start order, priority, pause/resume/relink), statistics, saved files | `manager.js`, `stats.js` | done: logic in `vexlo-core` (`queue.rs`, `stats.rs`, checked against the real JS manager), files in `vexlo-net` (`store.rs`) |
 | 3c-1 | Local API for the extension (127.0.0.1:6877: Host / Origin / token checks, routes, events), native-messaging host | `api.js`, `native/host.js` | done: decisions in `vexlo-core` (`api.rs`, checked against the real JS server), server in `vexlo-net` (`api.rs`, `native_host.rs`) |
-| 3c-2 | Async manager that runs the downloads and plugs into the API | `manager.js` | next |
+| 3c-2 | Async manager: runs files, HLS/DASH and yt-dlp downloads through the queue rules, saves the list, publishes events, plugs into the API | `manager.js` | done: `vexlo-net/manager.rs` (+ `taskjson.rs`, `resolve.rs`); checked end to end against a local server |
+| 3c-3 | Preview, probing a link for the confirm window, extraction | `manager.js` (`probeInfo`, `preview`) | next |
 | 4 | Tauri shell: windows, tray, settings, updater, installer; same `src/renderer` | `src/main` | |
 
 The Rust crates and the JS engine are compared with the same test servers (`test/server.js`) from stage 1b on.

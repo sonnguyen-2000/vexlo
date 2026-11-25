@@ -9,8 +9,11 @@ pub mod fetch;
 pub mod segmented;
 pub mod ytdlp;
 pub mod limiter;
+pub mod manager;
 pub mod native_host;
 pub mod probe;
+pub mod resolve;
 pub mod store;
+pub mod taskjson;
 
 pub use error::NetError;

@@ -3,6 +3,7 @@
 use crate::error::NetError;
 use crate::limiter::TaskLimiter;
 use crate::probe::probe;
+use crate::resolve::ResolvePath;
 use futures_util::StreamExt;
 use std::collections::{HashMap, HashSet};
 use std::io::SeekFrom;
@@ -109,6 +110,7 @@ struct Shared {
     inner: Mutex<Inner>,
     client: reqwest::Client,
     limiter: Arc<TaskLimiter>,
+    resolve: Mutex<Option<ResolvePath>>,
     /// 0 = running, 1 = paused by the user, 2 = cancelled by the user, 3 = failed
     halt: watch::Sender<u8>,
     start: Instant,
@@ -133,6 +135,7 @@ impl Download {
                 inner: Mutex::new(Inner { st: state, running: 0, max_conn: 1, meter: SpeedMeter::default(), last_emit_ms: 0, callback: None }),
                 client,
                 limiter,
+                resolve: Mutex::new(None),
                 halt,
                 start: Instant::now(),
             }),
@@ -191,6 +194,11 @@ impl Download {
     }
 
     /// Stop without deleting data; `run` returns and the download stays resumable.
+    /// Choose the file name through this function (see `ResolvePath`) instead of only looking at the disk.
+    pub fn set_resolver(&self, f: ResolvePath) {
+        *self.sh.resolve.lock().unwrap() = Some(f);
+    }
+
     pub fn pause(&self) {
         self.sh.halt.send_replace(1);
     }
@@ -297,6 +305,7 @@ impl Download {
             (if g.st.final_url.is_empty() { g.st.url.clone() } else { g.st.final_url.clone() }, g.st.headers.clone())
         };
         let info = probe(&self.sh.client, &url, &headers).await?;
+        let resolve = self.sh.resolve.lock().unwrap().clone();
         let part;
         let want_len;
         {
@@ -318,7 +327,10 @@ impl Download {
                 if let (Some(base), false) = (st.auto_base.clone(), st.user_named) {
                     st.dir = folder_for(&base, &name, "file");
                 }
-                let p = unique_path(&st.dir, &name, &HashSet::new());
+                let p = match &resolve {
+                    Some(f) => f(&st.dir, &name),
+                    None => unique_path(&st.dir, &name, &HashSet::new()),
+                };
                 st.filename = p.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or(name);
                 st.path = p;
             }

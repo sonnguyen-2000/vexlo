@@ -24,7 +24,7 @@ pub trait ApiBackend: Send + Sync + 'static {
     fn list(&self) -> Vec<Value>;
     fn exists(&self, id: &str) -> bool;
     /// Add downloads (already cleaned, see `clean_add_items`); returns the new ids.
-    fn add(&self, items: Vec<Value>, show: bool) -> Vec<Value>;
+    fn add(&self, items: Vec<Value>, show: bool) -> Result<Vec<Value>, String>;
     fn pause(&self, id: &str) -> BoxFuture<'static, ()>;
     fn resume(&self, id: &str);
     fn remove(&self, id: &str, delete_file: bool) -> BoxFuture<'static, ()>;
@@ -326,11 +326,15 @@ async fn handle_connection<B: ApiBackend>(
             Err((status, msg)) => respond_json(&mut s, status, &json!({ "error": msg }), o).await,
             Ok(body) => {
                 let show = body.get("show").map(truthy).unwrap_or(false);
-                let ids = backend.add(clean_add_items(&body), show);
-                if show {
-                    backend.show_window();
+                match backend.add(clean_add_items(&body), show) {
+                    Err(e) => respond_json(&mut s, 400, &json!({ "error": e }), o).await,
+                    Ok(ids) => {
+                        if show {
+                            backend.show_window();
+                        }
+                        respond_json(&mut s, 200, &json!({ "ids": ids }), o).await
+                    }
                 }
-                respond_json(&mut s, 200, &json!({ "ids": ids }), o).await
             }
         },
         Route::Task { id, action } => {
